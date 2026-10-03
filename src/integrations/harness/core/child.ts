@@ -4,6 +4,7 @@ import {
   runtimeProviderBinaryPath,
   type ConfigurableBinaryProvider,
 } from "../../../features/providers/model/providerBinaryPaths";
+import { getHarnessRuntimeOverride } from "../../../features/providers/model/harnessRuntime";
 
 /** Process I/O is supplied by the desktop or a headless host. Provider
  * protocols never need to know which process owns their children. */
@@ -313,6 +314,7 @@ export async function spawnChild(
     account,
     binaryProvider,
     binaryPath,
+    environment: binaryProvider ? getHarnessRuntimeOverride(binaryProvider)?.environment : undefined,
   });
   if (typeof pid !== "number" || pid <= 0) return;
   livePid.set(sessionId, pid);
