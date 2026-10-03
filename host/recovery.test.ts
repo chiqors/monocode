@@ -106,7 +106,7 @@ describe("restart recovery (thread survives; only the affected run is marked)", 
     expect(ids.size).toBe(runs.length);
   });
 
-  it("leaves the pending turn.start effect in the outbox for resume (restart)", async () => {
+  it("drains the pending turn.start effect from the outbox on restart recovery (S1)", async () => {
     const directory = setupDir();
     const store = new HostStore(join(directory, "recovery2.db"));
 
@@ -135,7 +135,11 @@ describe("restart recovery (thread survives; only the affected run is marked)", 
     expect(pending).toHaveLength(1);
     expect(pending[0]!.status).toBe("in-flight");
 
-    // Simulate a crash and restart: the effect survives for the next engine.
+    // S1: a crashed/hanging turn never reaches the run-loop completion path,
+    // so restart recovery retires the in-flight effect — drained exactly once,
+    // matching the normal completion path. Never left for "resume": the app
+    // doesn't auto-replay crashed sends (external effects may already exist),
+    // so re-sending would double-dispatch.
     const restarted = new HostEngine(store, { codex: hangingProvider().provider });
     cleanups.push(async () => {
       await restarted.close();
@@ -144,6 +148,6 @@ describe("restart recovery (thread survives; only the affected run is marked)", 
     const after = pendingEffects(store).filter(
       (e) => e.sessionId === created.sessionId && e.kind === "turn.start",
     );
-    expect(after).toHaveLength(1);
+    expect(after).toHaveLength(0);
   });
 });

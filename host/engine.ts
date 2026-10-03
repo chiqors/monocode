@@ -314,6 +314,11 @@ export class HostEngine {
             status: "interrupted",
             endedAt: value.updatedAt,
           });
+          // S1: a crashed/hanging turn never reaches the run-loop completion
+          // path, so its turn.start effect stays in-flight forever. Retire it
+          // here exactly like the normal completion path (markEffectDone),
+          // so the outbox is drained once and never re-sends after a restart.
+          markEffectDone(store, value.session.id, interruptedRun.id);
         }
         this.save(
           this.settled(
