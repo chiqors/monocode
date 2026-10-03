@@ -8,26 +8,29 @@ gap is a candidate for the next round of tracer-bullet tickets under
 
 ## 1. ProviderThread as a first-class durable entity (the biggest gap)
 
+**Landed (G1a #15 + G1b #16, closed).** `host/provider-thread.ts` records one
+`provider_threads` row per (session, provider) with `nativeThreadRef` as
+evidence, `firstRunOrdinal`/`lastRunOrdinal` coverage, and `handoffIds`;
+`host/engine.ts` writes it at the provider-bound / switch-handoff / send
+seams. Switching **back** to a provider with a prior thread now **resumes** it
+via its `nativeThreadRef` (`providerSessionId` restored + `provider.bind`),
+and `buildRunHandoffSummary` derives a **delta handoff** for only the
+off-provider runs (`handler: "switch-back"`, linked into the resumed thread);
+weak providers without a native cursor fall back to a full summary + fresh
+thread.
+
+**Remaining same-shape work (not ticketed):** `providerThreadId` on the session
+snapshot is still a thin optional field (`src/features/sessions/model/session.ts`);
+the frontend transcript rendering of a switch-back delta uses the existing
+handoff-block mechanism, and a future `thread/resume` call beyond `bind` is
+still on the provider side.
+
 **t3code V2:** `ProviderThread` is a durable object with a resume cursor
 (`nativeThreadRef`), per-provider coverage (`coveredRunRange`,
 `firstRunOrdinal`/`lastRunOrdinal`, `handoffIds`). Switching **back** to a
 prior provider defaults to **resuming that provider's previous provider
 thread** and injecting a **delta handoff** covering the off-provider runs;
 a fresh provider thread with a full summary is only the fallback.
-
-**MonoCode: the durable entity half has landed (#15, closed).** `host/provider-thread.ts`
-now records one `provider_threads` row per (session, provider) with
-`nativeThreadRef` as evidence, `firstRunOrdinal`/`lastRunOrdinal` coverage
-(derived from the run store, so a delta is derivable), and `handoffIds`,
-written at the provider-bound / switch-handoff / send seams.
-
-**Still to do (G1b, #16 — blocked by #15):** switching **back** to a provider
-still creates a **new target session** instead of **resuming** its prior
-provider thread with a **delta handoff** covering the off-provider runs.
-`providerThreadId` remains a thin optional field on the session snapshot
-(`src/features/sessions/model/session.ts`); `pendingSwitch` records
-`fromProviderSessionId`/`fromProviderAccountId` for revert; there is still no
-resume-cursor-driven `thread/resume` flow.
 
 **Why it matters:** it is t3code V2's default strategy for returning to a
 provider, preserves native continuity, and avoids repeatedly re-summarizing.
