@@ -45,6 +45,15 @@ export class HostStore {
       message TEXT,
       PRIMARY KEY (session_id, id)
     );`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS provider_bindings (
+      app_entity_kind TEXT NOT NULL,
+      app_entity_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      native_ref TEXT NOT NULL,
+      correlation TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (app_entity_kind, app_entity_id, provider)
+    );`);
     const columns = this.db.prepare("PRAGMA table_info(sessions)").all();
     if (!columns.some((column) => column.name === "summary"))
       this.db.exec("ALTER TABLE sessions ADD COLUMN summary TEXT");

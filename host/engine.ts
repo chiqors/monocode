@@ -36,6 +36,7 @@ import {
   normalizeRunEvent,
   type RunLifecycle,
 } from "./run-normalizer";
+import { bindProviderRef } from "./correlation";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -904,6 +905,18 @@ export class HostEngine {
     if (!live || live.value.runId !== runId || live.value.status !== "running")
       return;
     const session = applyHarnessEvent(live.value.session, event);
+    // App ids are primary; provider ids are refs. When the provider announces
+    // its native conversation id, record it as a durable correlation binding
+    // scoped to the app session id — never as primary identity.
+    if (event.type === "session.providerBound") {
+      bindProviderRef(this.store, {
+        appEntityKind: "session",
+        appEntityId: id,
+        provider: session.harness,
+        nativeRef: event.providerSessionId,
+        correlation: "native_exact",
+      });
+    }
     // Content-agnostic normalizer: fold the event into the run lifecycle state
     // (status transition only; content stays in blocks) and persist the run row.
     const lifecycle = normalizeRunEvent(live.runLifecycle, event);
