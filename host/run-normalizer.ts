@@ -28,6 +28,8 @@ export type Run = {
   attempts: number;
   /** User-visible prompt text; null for compaction turns. */
   message: string | null;
+  /** S5: the provider-native thread this run executed on (resume cursor). */
+  providerThreadId?: string;
 };
 
 /** The lifecycle state the normalizer tracks (not stored per event). */

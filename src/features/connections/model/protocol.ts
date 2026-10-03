@@ -186,6 +186,12 @@ export type HostCommand =
       targetRunOrdinal: number;
     }
   | {
+      type: "thread/resume";
+      commandId: string;
+      sessionId: string;
+      threadId: string;
+    }
+  | {
       type: "draft";
       commandId: string;
       sessionId: string;

@@ -235,6 +235,15 @@ export function parseCommand(input: unknown): HostCommand {
       targetRunOrdinal: Number(v.targetRunOrdinal),
     };
   }
+  if (v.type === "thread/resume") {
+    const threadId = text(v.threadId, "thread ID");
+    return {
+      type: "thread/resume",
+      commandId,
+      sessionId,
+      threadId,
+    };
+  }
   const runId = text(v.runId, "run ID");
   if (v.type === "cancel")
     return { type: "cancel", commandId, sessionId, runId };
@@ -605,6 +614,9 @@ export class HostEngine {
                   session: {
                     ...value.session,
                     providerSessionId: resuming.nativeThreadRef,
+                    // S5: the durable provider thread id (first-class resume
+                    // cursor), set alongside the legacy native ref.
+                    providerThreadId: resuming.nativeThreadRef,
                   },
                 };
                 this.provider(targetHarness).bind(
@@ -792,6 +804,25 @@ export class HostEngine {
             // No native RPC: host-only reconcile (the existing fallback).
             hostReconcile();
           }
+        } else if (command.type === "thread/resume") {
+          // S5: an explicit engine-level resume — establish the provider
+          // thread handle from the durable thread id (beyond raw `bind`),
+          // and persist the thread id on the session graph. This is the one
+          // path switch-back, forks, and recovery use to resume a native
+          // conversation without duplicating it.
+          if (value.status === "running")
+            throw new Error(
+              "Wait for the current turn before resuming a thread",
+            );
+          const threadId = command.threadId;
+          value = {
+            ...value,
+            session: {
+              ...value.session,
+              providerThreadId: threadId,
+            },
+          };
+          provider.bind(value.session.id, threadId, value.session.cwd);
         } else if (command.type === "send" || command.type === "compact") {
           if (value.status === "running")
             throw new Error("This session is already running");
@@ -1206,6 +1237,12 @@ export class HostEngine {
                   ? "completed"
                   : "interrupted",
               endedAt: now(),
+              // S5: the provider-native thread this run executed on (the
+              // session's provider-bound conversation id) is promoted onto the
+              // durable run row — a first-class resume cursor, not a thin
+              // side-thread string.
+              providerThreadId:
+                this.store.session(session.id).session.providerSessionId,
             });
           }
           // Finalize the root node alongside the run: completed only when the
@@ -1298,6 +1335,10 @@ export class HostEngine {
         nativeKind: "conversation",
         scope: identity === "strong" ? undefined : `provider:${session.harness}`,
       });
+      // S5: the provider-native thread id is a first-class, durable field on
+      // the session graph (surfaced in the snapshot) — the run row also
+      // carries it (see run terminal), so thread metadata survives restart.
+      session.providerThreadId = event.providerSessionId;
       // G1a: the durable ProviderThread records the resume cursor (the
       // provider-native thread ref) as evidence, plus the coverage of the runs
       // this provider has seen (the app run ordinals). The first run of this

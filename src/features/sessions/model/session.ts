@@ -424,6 +424,8 @@ export type Session = {
   usageLimit?: UsageLimit;
   /** Provider-side conversation id (Cursor ACP session id). */
   providerSessionId?: string;
+  /** S5: the provider-native thread id (resume cursor), first-class + durable. */
+  providerThreadId?: string;
   /** Named local credential profile used by Claude or Codex. */
   providerAccountId?: string;
   /** Context-window level reported by the harness. Absent until it reports. */

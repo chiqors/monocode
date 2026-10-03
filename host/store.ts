@@ -138,6 +138,10 @@ export class HostStore {
       this.db.exec(
         "ALTER TABLE runs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1",
       );
+    // S5: the provider thread id (resume cursor) a run executed on, made a
+    // durable graph field instead of a side-thread string.
+    if (!runColumns.some((column) => column.name === "provider_thread_id"))
+      this.db.exec("ALTER TABLE runs ADD COLUMN provider_thread_id TEXT");
     this.db.exec(`CREATE TABLE IF NOT EXISTS handoffs (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL REFERENCES sessions(id),
@@ -240,14 +244,15 @@ export class HostStore {
   upsertRun(sessionId: string, run: Run): void {
     this.db
       .prepare(
-        `INSERT INTO runs (id, session_id, ordinal, status, started_at, ended_at, message, attempts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO runs (id, session_id, ordinal, status, started_at, ended_at, message, attempts, provider_thread_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id, id) DO UPDATE SET
            status=excluded.status,
            started_at=excluded.started_at,
            ended_at=excluded.ended_at,
            message=excluded.message,
-           attempts=excluded.attempts`,
+           attempts=excluded.attempts,
+           provider_thread_id=excluded.provider_thread_id`,
       )
       .run(
         run.id,
@@ -258,6 +263,7 @@ export class HostStore {
         run.endedAt,
         run.message,
         run.attempts,
+        run.providerThreadId ?? null,
       );
   }
 
@@ -265,7 +271,7 @@ export class HostStore {
   runs(sessionId: string): Run[] {
     return this.db
       .prepare(
-        "SELECT id, session_id AS sessionId, ordinal, status, started_at AS startedAt, ended_at AS endedAt, message, attempts FROM runs WHERE session_id=? ORDER BY ordinal ASC",
+        "SELECT id, session_id AS sessionId, ordinal, status, started_at AS startedAt, ended_at AS endedAt, message, attempts, provider_thread_id AS providerThreadId FROM runs WHERE session_id=? ORDER BY ordinal ASC",
       )
       .all(sessionId) as unknown as Run[];
   }
