@@ -189,6 +189,61 @@ describe("handoff summary (deterministic local summarizer)", () => {
     expect(summary).toContain("fix the bug");
   });
 
+  it("builds a delta covering only the off-provider run range", async () => {
+    const directory = setupDir();
+    const store = new HostStore(join(directory, "handoff-delta.db"));
+    const replay = replayProvider(transcript());
+    const engine = new HostEngine(store, { codex: replay });
+    const project = store.addProject(directory, "Test");
+    cleanups.push(async () => {
+      await engine.close();
+      store.close();
+    });
+
+    const created = engine.command({
+      type: "create",
+      commandId: "create",
+      projectId: project.id,
+      harness: "codex",
+      model: "codex:test",
+      runtimeMode: "supervised",
+    });
+    engine.command({
+      type: "send",
+      commandId: "send1",
+      sessionId: created.sessionId,
+      text: "run one",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    engine.command({
+      type: "send",
+      commandId: "send2",
+      sessionId: created.sessionId,
+      text: "run two",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    engine.command({
+      type: "send",
+      commandId: "send3",
+      sessionId: created.sessionId,
+      text: "run three",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    // A provider that last participated after run 1 missed runs 2 and 3.
+    const delta = buildRunHandoffSummary(store, created.sessionId, {
+      fromOrdinal: 2,
+      toOrdinal: 3,
+    });
+    expect(delta).not.toContain("run one");
+    expect(delta).toContain("run two");
+    expect(delta).toContain("run three");
+
+    // No range → full summary (backwards compatible).
+    const full = buildRunHandoffSummary(store, created.sessionId);
+    expect(full).toContain("run one");
+  });
+
   it("configure with a harness change records the durable handoff artifact", async () => {
     const directory = setupDir();
     const store = new HostStore(join(directory, "handoff4.db"));

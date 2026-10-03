@@ -511,24 +511,28 @@ export class HostEngine {
             );
           const switching = command.harness !== undefined;
           if (switching && command.harness !== value.session.harness) {
-            // Provider switch: record a durable, store-derived handoff artifact
-            // before the session changes harness.
-            const summary = buildRunHandoffSummary(
+            // TS does not narrow `command.harness` here; capture the defined
+            // harness (the switch target) once for the whole branch.
+            // The branch guard (`switching && command.harness !==
+            // value.session.harness`) guarantees command.harness is set.
+            const targetHarness = command.harness!;
+            const latestRun = this.store.runs(value.session.id).at(-1);
+            // Departure handoff (from-side, existing T5 convention): record a
+            // durable, store-derived artifact for the provider we are leaving.
+            const departureSummary = buildRunHandoffSummary(
               this.store,
               value.session.id,
             );
-            const latestRun = this.store.runs(value.session.id).at(-1);
-            const handoff = recordHandoff(this.store, {
+            const departure = recordHandoff(this.store, {
               sessionId: value.session.id,
               provider: value.session.harness,
               runOrdinal: latestRun?.ordinal ?? 1,
-              summary,
+              summary: departureSummary,
               handler: value.session.harness,
             });
-            // G1a: extend the departing provider's durable thread up to the
-            // latest run (the handoff covers [.., latestRun]) and link the
-            // handoff id into it, so coverage and handoffIds are one source
-            // of truth for a later switch-back delta.
+            // Extend the departing provider's durable thread up to the latest
+            // run and link the handoff id, so coverage + handoffIds are one
+            // source of truth for a later switch-back delta.
             const departing = providerThreads(this.store, value.session.id).find(
               (thread) => thread.provider === value.session.harness,
             );
@@ -538,8 +542,92 @@ export class HostEngine {
               nativeThreadRef: departing?.nativeThreadRef ?? null,
               firstRunOrdinal: departing?.firstRunOrdinal ?? latestRun?.ordinal ?? 1,
               lastRunOrdinal: latestRun?.ordinal ?? departing?.lastRunOrdinal ?? 1,
-              handoffIds: [...(departing?.handoffIds ?? []), handoff],
+              handoffIds: [...(departing?.handoffIds ?? []), departure],
             });
+            // G1b: switching BACK to a provider with a prior ProviderThread
+            // resumes that thread (its nativeThreadRef resume cursor) and
+            // injects a delta handoff covering only the runs that happened
+            // while it was absent. Falling back to a fresh target thread + full
+            // summary when there is no prior thread or no native cursor.
+            const resuming = providerThreads(this.store, value.session.id).find(
+              (thread) => thread.provider === targetHarness,
+            );
+            if (resuming) {
+              // Resume: restore the provider-native thread ref so the next
+              // send binds/resumes the native conversation instead of opening
+              // a fresh one. The provider-boundary bind() carries the cursor
+              // to the harness layer.
+              const fromOrdinal = (resuming.lastRunOrdinal ?? 0) + 1;
+              const missedRuns =
+                latestRun && fromOrdinal <= latestRun.ordinal
+                  ? latestRun.ordinal - fromOrdinal + 1
+                  : 0;
+              if (resuming.nativeThreadRef) {
+                value = {
+                  ...value,
+                  session: {
+                    ...value.session,
+                    providerSessionId: resuming.nativeThreadRef,
+                  },
+                };
+                this.provider(targetHarness).bind(
+                  value.session.id,
+                  resuming.nativeThreadRef,
+                  value.session.cwd,
+                );
+                // Delta handoff: only the runs since this provider last
+                // participated (derived from the run store, never a chain).
+                if (missedRuns > 0) {
+                  const summary = buildRunHandoffSummary(
+                    this.store,
+                    value.session.id,
+                    { fromOrdinal, toOrdinal: latestRun!.ordinal },
+                  );
+                  const handoff = recordHandoff(this.store, {
+                    sessionId: value.session.id,
+                    provider: value.session.harness,
+                    runOrdinal: latestRun!.ordinal,
+                    summary,
+                    handler: "switch-back",
+                  });
+                  // Link the delta into the resumed thread (coverage stays
+                  // put: codex has already seen [.. before], the delta is
+                  // after).
+                  recordProviderThread(this.store, {
+                    sessionId: value.session.id,
+                    provider: targetHarness,
+                    nativeThreadRef: resuming.nativeThreadRef,
+                    firstRunOrdinal: resuming.firstRunOrdinal,
+                    lastRunOrdinal: resuming.lastRunOrdinal,
+                    handoffIds: [...resuming.handoffIds, handoff],
+                  });
+                }
+              } else if (missedRuns > 0) {
+                // Weak provider with no native resume cursor: the delta is
+                // impossible, so fall back to a full summary + fresh thread.
+                // The target still gets complete context through a
+                // switch-back handoff covering everything it missed.
+                const summary = buildRunHandoffSummary(
+                  this.store,
+                  value.session.id,
+                );
+                const handoff = recordHandoff(this.store, {
+                  sessionId: value.session.id,
+                  provider: value.session.harness,
+                  runOrdinal: latestRun!.ordinal,
+                  summary,
+                  handler: "switch-back",
+                });
+                recordProviderThread(this.store, {
+                  sessionId: value.session.id,
+                  provider: targetHarness,
+                  nativeThreadRef: null,
+                  firstRunOrdinal: resuming.firstRunOrdinal,
+                  lastRunOrdinal: resuming.lastRunOrdinal,
+                  handoffIds: [...resuming.handoffIds, handoff],
+                });
+              }
+            }
           }
           value = {
             ...value,

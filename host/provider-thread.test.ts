@@ -420,11 +420,15 @@ describe("ProviderThread through the engine (replay seam)", () => {
     expect(a.firstRunOrdinal).toBe(1);
     expect(a.lastRunOrdinal).toBe(1);
     expect(a.nativeThreadRef).toBe("native-a-1");
-    expect(a.handoffIds).toHaveLength(1); // the A -> B departure handoff
+    // The A -> B departure handoff plus the B -> A switch-back delta both
+    // link into provider A's thread (G1b resumes A with the delta).
+    expect(a.handoffIds).toHaveLength(2);
     // Provider B covered run 2 and carries the B -> A departure handoff.
     expect(b.firstRunOrdinal).toBe(2);
     expect(b.lastRunOrdinal).toBe(2);
     expect(b.nativeThreadRef).toBe("native-b-1");
+    // Cursor's departure from B -> A links into B (still 1; no switch-back
+    // into cursor happened).
     expect(b.handoffIds).toHaveLength(1);
   });
 });

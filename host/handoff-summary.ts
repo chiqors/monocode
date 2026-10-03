@@ -29,15 +29,29 @@ const RUN_LIMIT = 12;
  * run that happened, each terminal status, and the latest user prompt + last
  * assistant reply — derived, never hidden prompt magic, deterministic (same
  * store state → same text).
+ *
+ * `range` narrows the delta to the app run ordinals the target provider
+ * missed (the off-provider runs since it last participated). When omitted
+ * (or when the range is empty), the full recent run list is used — the
+ * backwards-compatible behaviour, and the fallback when a delta is impossible.
  */
 export function buildRunHandoffSummary(
   store: HostStore,
   sessionId: string,
+  range?: { fromOrdinal: number; toOrdinal: number },
 ): string {
   const session = store.session(sessionId).session;
   const runs = store.runs(sessionId);
   const lines: string[] = [];
-  const recent = runs.slice(-RUN_LIMIT);
+  // The delta is the runs in [fromOrdinal, toOrdinal]. When a range is
+  // supplied it replaces the "recent only" window: a resumed provider must see
+  // exactly the runs it missed, never re-summarised runs it already covered.
+  const recent = range
+    ? runs.filter(
+        (run) =>
+          run.ordinal >= range.fromOrdinal && run.ordinal <= range.toOrdinal,
+      )
+    : runs.slice(-RUN_LIMIT);
   if (recent.length > 0) {
     lines.push("## Runs");
     for (const run of recent) {
