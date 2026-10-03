@@ -41,6 +41,10 @@ import {
   applyNodeEvent,
   freshRootNode,
 } from "./execution-node";
+import {
+  buildRunHandoffSummary,
+  recordHandoff,
+} from "./handoff-summary";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -124,6 +128,11 @@ export function parseCommand(input: unknown): HostCommand {
   if (v.type === "configure") {
     if (!RUNTIME_MODES.includes(v.runtimeMode as never))
       throw new Error("Invalid permission mode");
+    if (
+      v.harness !== undefined &&
+      (!isRemoteProvider(v.harness) || String(v.harness) !== v.harness)
+    )
+      throw new Error("Invalid provider");
     return {
       type: "configure",
       commandId,
@@ -131,6 +140,7 @@ export function parseCommand(input: unknown): HostCommand {
       model: text(v.model, "model", 200),
       modelSettings: modelSettings(v.modelSettings),
       runtimeMode: v.runtimeMode as Session["runtimeMode"],
+      ...(v.harness !== undefined ? { harness: v.harness as RemoteProvider } : {}),
     };
   }
   if (v.type === "compact") return { type: "compact", commandId, sessionId };
@@ -476,10 +486,28 @@ export class HostEngine {
             throw new Error(
               "Wait for the current turn before changing settings",
             );
+          const switching = command.harness !== undefined;
+          if (switching && command.harness !== value.session.harness) {
+            // Provider switch: record a durable, store-derived handoff artifact
+            // before the session changes harness.
+            const summary = buildRunHandoffSummary(
+              this.store,
+              value.session.id,
+            );
+            const latestRun = this.store.runs(value.session.id).at(-1);
+            recordHandoff(this.store, {
+              sessionId: value.session.id,
+              provider: value.session.harness,
+              runOrdinal: latestRun?.ordinal ?? 1,
+              summary,
+              handler: value.session.harness,
+            });
+          }
           value = {
             ...value,
             session: {
               ...value.session,
+              ...(switching ? { harness: command.harness } : {}),
               model: command.model,
               modelSettings: command.modelSettings,
               runtimeMode: command.runtimeMode,

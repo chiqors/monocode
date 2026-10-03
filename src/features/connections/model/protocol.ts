@@ -159,6 +159,8 @@ export type HostCommand =
       model: string;
       modelSettings: Record<string, string>;
       runtimeMode: RuntimeMode;
+      /** Provider switch: when present, the session's harness changes. */
+      harness?: RemoteProvider;
     }
   | { type: "compact"; commandId: string; sessionId: string }
   | {
