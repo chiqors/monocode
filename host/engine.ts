@@ -46,6 +46,11 @@ import {
   recordHandoff,
 } from "./handoff-summary";
 import { capabilitiesFor, degradePolicy } from "./capabilities";
+import {
+  enqueueProviderEffect,
+  markEffectInFlight,
+  markEffectDone,
+} from "./provider-effects";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -681,6 +686,17 @@ export class HostEngine {
             attempts: 1,
             message: command.type === "compact" ? null : command.text,
           });
+          // Durable effect outbox: the turn.start effect is enqueued BEFORE
+          // the provider is dispatched, so a restart can resume it.
+          enqueueProviderEffect(this.store, {
+            sessionId: value.session.id,
+            runId,
+            kind: "turn.start",
+            payload:
+              command.type === "compact"
+                ? { compact: true }
+                : { text: command.text },
+          });
           // The root execution node for this run, created alongside the run.
           this.store.upsertNode(
             freshRootNode(value.session.id, runId),
@@ -848,6 +864,8 @@ export class HostEngine {
     const activeRunId = runId!;
     const provider = this.provider(session.harness);
     const active = { runId: runId!, done: Promise.resolve(), cancelled: false, persistenceFailed: false };
+    // The effect is dispatched now: flip it to in-flight in the durable outbox.
+    markEffectInFlight(this.store, session.id, activeRunId, { attempts: 1 });
     this.running.set(session.id, active);
     this.live.set(session.id, {
       value,
@@ -896,6 +914,8 @@ export class HostEngine {
         this.live.delete(session.id);
         const latest = this.store.session(session.id);
         if (latest.runId === runId) {
+          // The turn.start effect completed: retire it from the outbox.
+          markEffectDone(this.store, session.id, activeRunId);
           const message = this.closing
             ? "Host stopped. This turn was interrupted."
             : active.persistenceFailed

@@ -86,6 +86,16 @@ export class HostStore {
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS idx_handoffs_session ON handoffs(session_id)",
     );
+    this.db.exec(`CREATE TABLE IF NOT EXISTS provider_effects (
+      session_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload TEXT,
+      status TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (session_id, run_id, kind)
+    );`);
     const columns = this.db.prepare("PRAGMA table_info(sessions)").all();
     if (!columns.some((column) => column.name === "summary"))
       this.db.exec("ALTER TABLE sessions ADD COLUMN summary TEXT");
