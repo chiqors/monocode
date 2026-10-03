@@ -93,14 +93,26 @@ Adding a deterministic clock/id layer would strengthen replay determinism.
 
 ## 5. Structural delegation results
 
+**Landed (G5 #20, closed).** `host/delegate-task.ts` returns the t3code
+`DelegateTaskResult` shape (`taskId`, `childThreadId`, `childRunId`,
+`childNodeId`, `status`, `workState`, `summary`, `resultContextTransferId`,
+`latestTerminal*`, `waitTimedOut`) with durable `delegated_tasks` rows,
+`task_status`/`task_cancel`, and `mode: async | wait` (async returns the
+durable state immediately — no 3s bounded poll; wait honors `timeoutMs`
+without cancelling the child). Results still integrate into the Lead via the
+`handler: "delegate_task"` Handoff (F4 one-graph) + child subagent node;
+capability degradation (`policy: native|synthetic`) preserved. The agent-app
+surface forwards `mode`/`timeoutMs` and exposes `task_status`/`task_cancel`.
+
+**Remaining same-shape work (not ticketed):** the remote `task.status` /
+`task.cancel` machine bridge is wired in `App.tsx` for remote sessions (local
+path fails loudly); `task_status`'s foreign-parent rejection is host-side
+(the row is only readable by taskId).
+
 **t3code V2:** a delegated task returns a structured `subagent_result`
 context transfer (durable task state: `taskId`, `childThreadId`,
 `childRunId`, `childNodeId`, `workState`, `latestTerminal*`, wait timeout,
 etc.), with `task_status`/`task_cancel` and `mode: async | wait`.
-
-**MonoCode today:** `delegateTask` waits with a bounded synchronous poll (3s
-deadline) and uses the worker's **last assistant reply** as the result
-(`host/delegate-task.ts`).
 
 ## 6. Rich capability shape + scoped correlation
 
