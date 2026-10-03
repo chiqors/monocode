@@ -353,6 +353,36 @@ export function bindOpenCodeSession(
   resumeByThread.set(threadId, { sessionId, cwd });
 }
 
+/**
+ * S2: the provider-native fork RPC. OpenCode exposes POST /session/:id/fork;
+ * when a fork's first dispatch resolves natively, we ask the running OpenCode
+ * server to fork the source conversation into the fork thread's directory and
+ * return the new native session id (the resume cursor for the fork thread).
+ */
+export async function forkOpenCodeSession(
+  forkSessionId: string,
+  cwd: string,
+  sourceSessionId?: string,
+): Promise<{ sessionId: string }> {
+  const sourceLive = sourceSessionId ? liveByThread.get(sourceSessionId) : undefined;
+  if (!sourceLive) {
+    // The source conversation is not live right now; fall back to a new
+    // OpenCode session in the fork's directory (portable-context path).
+    throw new Error("Source OpenCode session is not live");
+  }
+  const { path } = await resolveOpenCodeBinaryImpl();
+  await assertOpenCodeVersion(path, cwd);
+  const client = new OpenCodeClient(sourceLive.client.baseUrl, cwd);
+  const forked = await client.forkSession(sourceLive.openCodeSessionId, cwd);
+  // Record the fork's resume cursor so the fork thread can later bind/resume
+  // this native conversation.
+  resumeByThread.set(forkSessionId, {
+    sessionId: forked.id,
+    cwd,
+  });
+  return { sessionId: forked.id };
+}
+
 async function ensureLive(input: HarnessSessionInput): Promise<Live> {
   const existing = liveByThread.get(input.sessionId);
   if (existing && existing.cwd === input.cwd) {

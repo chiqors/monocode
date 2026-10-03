@@ -174,6 +174,12 @@ export type HostCommand =
       planBlockId?: string;
     }
   | {
+      type: "fork";
+      commandId: string;
+      sessionId: string;
+      forkRunOrdinal: number;
+    }
+  | {
       type: "draft";
       commandId: string;
       sessionId: string;

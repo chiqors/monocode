@@ -14,8 +14,11 @@ import {
   createForkTransfer,
   pendingForkTransfer,
   resolveForkTransfer,
+  type ContextTransferResolution,
 } from "./context-transfer";
+import { checkpointScopes } from "./checkpoint";
 import { now, uuid } from "./determinism";
+import type { HostProvider } from "./providers";
 
 export type ForkResult = {
   sessionId: string;
@@ -56,16 +59,24 @@ export function forkThread(
   const source = store.session(sourceSessionId);
   const runs = store.runs(sourceSessionId);
   const forkAtRun = runs.find((r) => r.ordinal === forkRunOrdinal);
-  // Stable source point policy (G2): the fork-at run must be terminal, or the
-  // thread must be idle with no in-flight run. A running/queued run is an
-  // unstable point — forking around active work cannot be faithfully
-  // reproduced, so reject it. (Checkpoint source points arrive with G3.)
-  if (forkAtRun && !STABLE_FORK_STATUSES.has(forkAtRun.status)) {
-    throw new Error(
-      `Fork requires a stable source point: run ${forkRunOrdinal} is ${forkAtRun.status}`,
+  // Stable source point policy (G2 + S2): the fork-at run must be terminal, or
+  // the thread must be idle with no in-flight run — OR the fork-at point has a
+  // captured checkpoint scope (a restart-stable boundary). A running/queued
+  // run is an unstable point — forking around active work cannot be faithfully
+  // reproduced, so reject it.
+  const hasCapturedCheckpointAt =
+    forkAtRun !== undefined &&
+    checkpointScopes(store, sourceSessionId).some(
+      (scope) =>
+        scope.runOrdinal === forkRunOrdinal && scope.status === "captured",
     );
-  }
-  if (!forkAtRun && runs.some((run) => !STABLE_FORK_STATUSES.has(run.status))) {
+  if (forkAtRun && !STABLE_FORK_STATUSES.has(forkAtRun.status)) {
+    if (!hasCapturedCheckpointAt) {
+      throw new Error(
+        `Fork requires a stable source point: run ${forkRunOrdinal} is ${forkAtRun.status}`,
+      );
+    }
+  } else if (!forkAtRun && runs.some((run) => !STABLE_FORK_STATUSES.has(run.status))) {
     throw new Error(
       "Fork requires a stable source point: the thread has an in-flight run",
     );
@@ -143,21 +154,44 @@ export function forkThread(
  * Returns the Handoff summary text (empty if the fork is not pending or
  * already resolved).
  */
-export function resolveForkOnFirstDispatch(
+export async function resolveForkOnFirstDispatch(
   store: HostStore,
   forkSessionId: string,
-): string {
+  provider?: HostProvider,
+): Promise<string> {
   const pending = pendingForkTransfer(store, forkSessionId);
   if (!pending) return "";
   const summary = buildRunHandoffSummary(store, pending.sourceSessionId);
-  recordHandoff(store, {
-    sessionId: forkSessionId,
-    provider: store.session(forkSessionId).session.harness,
-    runOrdinal: 1,
-    summary,
-    handler: "fork",
-  });
-  resolveForkTransfer(store, forkSessionId, { summary });
+  // The fork thread's working directory (the directory the native fork should
+  // materialize in). Derived from the fork's own session row.
+  const forkCwd = store.session(forkSessionId).session.cwd;
+  let resolution: ContextTransferResolution = { strategy: "portable_context", summary };
+  // S2: when the harness exposes a native fork RPC, prefer it — the fork
+  // resumes the provider-native conversation (recording the native ref) and
+  // only falls back to the portable Handoff when native is unavailable.
+  const nativeRef = await provider?.forkSession?.(
+    pending.sourceSessionId,
+    forkSessionId,
+    forkCwd,
+  );
+  if (nativeRef?.sessionId) {
+    resolution = {
+      strategy: "native_fork",
+      nativeForkRef: nativeRef.sessionId,
+      summary,
+    };
+  } else {
+    // The portable context artifact is still recorded as the auditable,
+    // reviewable handoff the next harness receives.
+    recordHandoff(store, {
+      sessionId: forkSessionId,
+      provider: store.session(forkSessionId).session.harness,
+      runOrdinal: 1,
+      summary,
+      handler: "fork",
+    });
+  }
+  resolveForkTransfer(store, forkSessionId, resolution);
   return summary;
 }
 

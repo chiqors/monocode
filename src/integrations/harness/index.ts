@@ -36,6 +36,7 @@ export {
   sendOpenCodeTurn,
   compactOpenCodeContext,
   rewindOpenCodeLastTurn,
+  forkOpenCodeSession,
   cancelOpenCodeTurn,
   respondOpenCodeApproval,
   respondOpenCodeQuestion,

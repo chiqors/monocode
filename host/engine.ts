@@ -42,7 +42,7 @@ import {
   applyNodeEvent,
   freshRootNode,
 } from "./execution-node";
-import { resolveForkOnFirstDispatch } from "./fork-merge";
+import { forkThread, resolveForkOnFirstDispatch } from "./fork-merge";
 import {
   buildRunHandoffSummary,
   recordHandoff,
@@ -202,6 +202,19 @@ export function parseCommand(input: unknown): HostCommand {
       sessionId,
       draftBlockId: text(v.draftBlockId, "draft block ID"),
     };
+  if (v.type === "fork") {
+    if (
+      !Number.isSafeInteger(v.forkRunOrdinal) ||
+      Number(v.forkRunOrdinal) < 1
+    )
+      throw new Error("Invalid fork run ordinal");
+    return {
+      type: "fork",
+      commandId,
+      sessionId,
+      forkRunOrdinal: Number(v.forkRunOrdinal),
+    };
+  }
   const runId = text(v.runId, "run ID");
   if (v.type === "cancel")
     return { type: "cancel", commandId, sessionId, runId };
@@ -690,6 +703,24 @@ export class HostEngine {
               ),
             },
           };
+        } else if (command.type === "fork") {
+          if (value.status === "running")
+            throw new Error(
+              "Wait for the current turn before forking (unstable source point)",
+            );
+          // S2: the fork is created lazily — a target App thread + a pending
+          // ContextTransfer, with zero provider work (native fork / portable
+          // context resolve on the fork's first dispatch). forkThread enforces
+          // the stable-source-point policy (terminal run, idle thread, or a
+          // captured checkpoint scope).
+          const forkResult = forkThread(
+            this.store,
+            value.session.id,
+            command.forkRunOrdinal,
+          );
+          // Replace the working session with the new fork session so the
+          // shared save path below persists it and returns its id/revision.
+          value = this.store.session(forkResult.sessionId);
         } else if (command.type === "send" || command.type === "compact") {
           if (value.status === "running")
             throw new Error("This session is already running");
@@ -745,7 +776,11 @@ export class HostEngine {
           // copied source blocks, so the block-based `firstTurn` is false —
           // the pending transfer is the true marker of "first dispatch").
           if (command.type === "send")
-            resolveForkOnFirstDispatch(this.store, value.session.id);
+            resolveForkOnFirstDispatch(
+              this.store,
+              value.session.id,
+              this.provider(value.session.harness),
+            );
           const placeholderTitle =
             value.session.title === "New remote session" ||
             canReplaceSessionTitle(

@@ -36,6 +36,12 @@ import { respondQuestion as respondPiQuestion } from "../src/integrations/harnes
 export interface HostProvider {
   send(input: SendTurnInput): Promise<void>;
   compact?(input: CompactContextInput): Promise<void>;
+  /** Provider-native conversation fork RPC (OpenCode POST /session/:id/fork). */
+  forkSession?(
+    sessionId: string,
+    forkSessionId: string,
+    forkCwd: string,
+  ): Promise<{ sessionId: string }>;
   cancel(id: string): Promise<void>;
   stop(id: string): Promise<void>;
   bind(id: string, providerId: string, cwd: string): void;
@@ -94,6 +100,12 @@ export const hostProviders: Record<RemoteProvider, HostProvider> = {
   opencode: {
     send: opencode.sendOpenCodeTurn,
     compact: opencode.compactOpenCodeContext,
+    forkSession: (sessionId, forkThreadId, forkCwd) =>
+      opencode.forkOpenCodeSession(
+        forkThreadId,
+        forkCwd,
+        sessionId,
+      ),
     cancel: opencode.cancelOpenCodeTurn,
     stop: opencode.forgetOpenCodeSession,
     bind: opencode.bindOpenCodeSession,

@@ -15,14 +15,19 @@ import { now, uuid } from "./determinism";
 export type ContextTransferState = "pending" | "resolved" | "superseded";
 export type ContextTransferType = "fork";
 
+/** How a pending fork transfer was resolved (t3code V2 resolution shape). */
+export type ContextTransferResolution =
+  | { strategy: "native_fork"; nativeForkRef: string; summary?: string }
+  | { strategy: "portable_context"; summary: string };
+
 export type ContextTransfer = {
   id: string;
   sourceSessionId: string;
   forkSessionId: string;
   type: ContextTransferType;
   state: ContextTransferState;
-  /** Resolution payload (e.g. { summary } for portable-context resolution). */
-  payload?: unknown;
+  /** Resolution payload ({ strategy, ... }) once resolved. */
+  payload?: ContextTransferResolution;
   createdAt: number;
 };
 
@@ -75,11 +80,38 @@ export function pendingForkTransfer(
   };
 }
 
+/** The resolved transfer for a fork session once it is no longer pending. */
+export function resolvedForkTransfer(
+  store: HostStore,
+  forkSessionId: string,
+): ContextTransfer | undefined {
+  const row = store.db
+    .prepare(
+      `SELECT id,
+              source_session_id AS sourceSessionId,
+              fork_session_id AS forkSessionId,
+              type,
+              state,
+              payload,
+              created_at AS createdAt
+       FROM context_transfers
+       WHERE fork_session_id=? AND type='fork' AND state='resolved'`,
+    )
+    .get(forkSessionId) as
+    | (Omit<ContextTransfer, "payload"> & { payload: string | null })
+    | undefined;
+  if (!row) return undefined;
+  return {
+    ...row,
+    payload: row.payload ? JSON.parse(row.payload) : undefined,
+  } as ContextTransfer;
+}
+
 /** Mark a pending fork transfer resolved with a resolution payload. */
 export function resolveForkTransfer(
   store: HostStore,
   forkSessionId: string,
-  resolution: { summary: string },
+  resolution: ContextTransferResolution,
 ): void {
   store.db
     .prepare(
