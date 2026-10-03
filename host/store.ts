@@ -13,6 +13,7 @@ import type { LinkedWorkItem } from "../src/features/sessions/model/session";
 import { sessionNeedsInput } from "../src/features/sessions/model/session";
 import type { Run } from "./run-normalizer";
 import type { ExecutionNode } from "./execution-node";
+import { uuid } from "./determinism";
 
 const CACHED_SESSIONS = 32;
 
@@ -164,7 +165,7 @@ export class HostStore {
       this.db.exec("ALTER TABLE sessions ADD COLUMN summary TEXT");
     this.db
       .prepare("INSERT OR IGNORE INTO metadata VALUES ('environmentId', ?)")
-      .run(randomUUID());
+      .run(uuid());
     this.environmentId = String(
       this.db
         .prepare("SELECT value FROM metadata WHERE key='environmentId'")
@@ -204,7 +205,7 @@ export class HostStore {
   addProject(cwd: string, name: string): HostProject {
     this.db
       .prepare("INSERT OR IGNORE INTO projects VALUES (?, ?, ?)")
-      .run(randomUUID(), cwd, name);
+      .run(uuid(), cwd, name);
     return this.db
       .prepare("SELECT * FROM projects WHERE cwd=?")
       .get(cwd) as unknown as HostProject;

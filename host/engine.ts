@@ -37,6 +37,7 @@ import {
   type RunLifecycle,
 } from "./run-normalizer";
 import { bindProviderRef, pickCorrelationStrategy } from "./correlation";
+import { now, uuid } from "./determinism";
 import {
   applyNodeEvent,
   freshRootNode,
@@ -372,10 +373,7 @@ export class HostEngine {
 
   private save(value: HostSession, event: unknown): HostSession {
     return this.store.transaction(() =>
-      this.store.save(
-        { ...value, revision: value.revision + 1, updatedAt: Date.now() },
-        event,
-      ),
+      this.store.save({ ...value, revision: value.revision + 1, updatedAt: now() }, event),
     );
   }
 
@@ -475,16 +473,16 @@ export class HostEngine {
           throw new Error("Wait for the branch switch to finish");
         this.provider(command.harness);
         const cwd = resolveHostWorktree(project.cwd, command.worktreeCwd);
-        const now = Date.now();
+        const createdAt = now();
         value = {
           projectId: project.id,
           autoWorktreeBranch: command.autoWorktreeBranch,
           revision: 0,
           status: "idle",
-          createdAt: now,
-          updatedAt: now,
+          createdAt,
+          updatedAt: createdAt,
           session: {
-            id: randomUUID(),
+            id: uuid(),
             cwd,
             harness: command.harness,
             model: command.model,
@@ -730,7 +728,7 @@ export class HostEngine {
               ? (draft?.attachments ??
                 resolveAttachments(this.store, command.attachments ?? []))
               : [];
-          const runId = randomUUID();
+          const runId = uuid();
           const firstTurn =
             command.type === "send" &&
             !value.session.blocks.some((block) => !block.draft);
@@ -790,7 +788,7 @@ export class HostEngine {
                   role: "user",
                   text: command.type === "compact" ? "/compact" : command.text,
                   ...(attachments.length ? { attachments } : {}),
-                  startedAt: Date.now(),
+                  startedAt: now(),
                   turnModel: {
                     harness: value.session.harness,
                     id: value.session.model,
@@ -805,7 +803,7 @@ export class HostEngine {
           };
           // The counted, durable Run entity: created in the same transaction
           // as the send so the run row and the session stay consistent.
-          const startedAt = Date.now();
+          const startedAt = now();
           const runOrdinal = this.store.runs(value.session.id).length + 1;
           this.store.upsertRun(value.session.id, {
             id: runId,
@@ -919,7 +917,7 @@ export class HostEngine {
           ...value,
           revision: value.revision + 1,
           // Creation already initialized both timestamps from the same clock read.
-          updatedAt: command.type === "create" ? value.updatedAt : Date.now(),
+          updatedAt: command.type === "create" ? value.updatedAt : now(),
         },
         { type: "command", command },
       );
@@ -1083,7 +1081,7 @@ export class HostEngine {
                 finalLifecycle?.status === "completed"
                   ? "completed"
                   : "interrupted",
-              endedAt: Date.now(),
+              endedAt: now(),
             });
           }
           // Finalize the root node alongside the run: completed only when the
@@ -1099,7 +1097,7 @@ export class HostEngine {
                 finalLifecycle?.status === "completed"
                   ? ("completed" as const)
                   : ("interrupted" as const),
-              endedAt: Date.now(),
+              endedAt: now(),
             });
           }
           this.save(

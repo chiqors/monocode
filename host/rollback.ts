@@ -13,6 +13,7 @@ import type { HostStore } from "./store";
 import { recordHandoff } from "./handoff-summary";
 import { providerThreads } from "./provider-thread";
 import { checkpointScopes, markScopeRolledBack } from "./checkpoint";
+import { now } from "./determinism";
 
 /**
  * Roll a thread back to a target run ordinal. Durable, host-side reconcile:
@@ -40,7 +41,7 @@ export function rollbackThread(
       store.upsertRun(sessionId, {
         ...run,
         status: "rolled_back",
-        endedAt: run.endedAt ?? Date.now(),
+        endedAt: run.endedAt ?? now(),
       });
     }
   }

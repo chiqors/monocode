@@ -7,6 +7,7 @@
 // a stable point to reconcile against, and (with G2) are the future stable
 // fork source points.
 import type { HostStore } from "./store";
+import { now, uuid } from "./determinism";
 
 export type CheckpointScopeStatus = "baselined" | "captured" | "rolled_back";
 
@@ -36,7 +37,7 @@ export function createCheckpointScope(
     "sessionId" | "runOrdinal" | "advancesAppRunCount"
   > & { parentId?: string },
 ): string {
-  const id = crypto.randomUUID();
+  const id = uuid();
   store.db
     .prepare(
       `INSERT INTO checkpoint_scopes
@@ -49,7 +50,7 @@ export function createCheckpointScope(
       scope.sessionId,
       scope.runOrdinal,
       scope.advancesAppRunCount ? 1 : 0,
-      Date.now(),
+      now(),
     );
   return id;
 }
@@ -77,7 +78,7 @@ export function captureCheckpoint(
     .prepare(
       "UPDATE checkpoint_scopes SET capture_summary=?, status='captured', captured_at=? WHERE id=? AND status != 'rolled_back'",
     )
-    .run(captureSummary, Date.now(), scopeId);
+    .run(captureSummary, now(), scopeId);
 }
 
 /** Mark a checkpoint scope rolled back (later runs turned over). */

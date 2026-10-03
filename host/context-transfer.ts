@@ -10,6 +10,7 @@
 // pending-fork record (the t3code term is deliberately used only for the
 // host-side entity, mirroring the reference shape).
 import type { HostStore } from "./store";
+import { now, uuid } from "./determinism";
 
 export type ContextTransferState = "pending" | "resolved" | "superseded";
 export type ContextTransferType = "fork";
@@ -30,7 +31,7 @@ export function createForkTransfer(
   store: HostStore,
   scope: { sourceSessionId: string; forkSessionId: string },
 ): string {
-  const id = crypto.randomUUID();
+  const id = uuid();
   store.db
     .prepare(
       `INSERT INTO context_transfers
@@ -38,7 +39,7 @@ export function createForkTransfer(
        VALUES (?, ?, ?, 'fork', 'pending', NULL, ?)
        ON CONFLICT(fork_session_id, type) DO NOTHING`,
     )
-    .run(id, scope.sourceSessionId, scope.forkSessionId, Date.now());
+    .run(id, scope.sourceSessionId, scope.forkSessionId, now());
   const row = store.db
     .prepare(
       "SELECT id FROM context_transfers WHERE fork_session_id=? AND type='fork'",

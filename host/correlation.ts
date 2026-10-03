@@ -17,6 +17,7 @@
 import type { HarnessId } from "../src/features/sessions/model/session";
 import type { HostStore } from "./store";
 import type { IdentityTier } from "./capabilities";
+import { now } from "./determinism";
 
 export type CorrelationStrategy =
   | "native_exact"
@@ -83,7 +84,7 @@ export function bindProviderRef(
       binding.correlation,
       binding.nativeKind ?? null,
       binding.scope ?? null,
-      Date.now(),
+      now(),
     );
 }
 

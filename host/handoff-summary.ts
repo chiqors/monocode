@@ -6,6 +6,7 @@
 // never hidden prompt concatenation: it is reviewable app data.
 import type { HarnessId } from "../src/features/sessions/model/session";
 import type { HostStore } from "./store";
+import { now, uuid } from "./determinism";
 
 export type HandoffRecord = {
   id: string;
@@ -94,7 +95,7 @@ export function recordHandoff(
   store: HostStore,
   record: Omit<HandoffRecord, "id" | "createdAt">,
 ): string {
-  const id = crypto.randomUUID();
+  const id = uuid();
   store.db
     .prepare(
       `INSERT INTO handoffs (id, session_id, provider, run_ordinal, handler, summary, created_at)
@@ -107,7 +108,7 @@ export function recordHandoff(
       record.runOrdinal,
       record.handler,
       record.summary,
-      Date.now(),
+      now(),
     );
   return id;
 }

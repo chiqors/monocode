@@ -16,6 +16,7 @@ import type { HostEngine } from "./engine";
 import type { HostStore } from "./store";
 import { capabilitiesFor, degradePolicy } from "./capabilities";
 import { recordHandoff } from "./handoff-summary";
+import { now, uuid } from "./determinism";
 
 export type DelegationMode = "async" | "wait";
 
@@ -103,21 +104,21 @@ export async function delegateTask(
     : undefined;
   const worker = engine.command({
     type: "create",
-    commandId: `delegate-create-${Date.now()}`,
+    commandId: `delegate-create-${now()}`,
     projectId: project,
     harness: input.provider,
     model: input.model,
     runtimeMode: input.runtimeMode,
   });
   const workerSessionId = worker.sessionId;
-  const taskId = `task:${crypto.randomUUID()}`;
+  const taskId = `task:${uuid()}`;
   // The child subagent node id under the lead run (created on settlement, but
   // referenced durably now so task_status works before it finishes).
   const childNodeId = `subagent:${workerSessionId}`;
 
   engine.command({
     type: "send",
-    commandId: `delegate-send-${Date.now()}`,
+    commandId: `delegate-send-${now()}`,
     sessionId: workerSessionId,
     text: input.task,
   });
@@ -224,7 +225,7 @@ function finalizeDelegation(
       parentId: leadRoot.id,
       kind: "subagent",
       status: latestTerminal?.status === "completed" ? "completed" : "running",
-      startedAt: Date.now(),
+      startedAt: now(),
       endedAt: null,
       content: {
         title: `Delegated to ${provider}: ${task.slice(0, 60)}`,
@@ -263,7 +264,7 @@ function finalizeDelegation(
       scope.mode,
       scope.timeoutMs,
       scope.waitTimedOut ? 1 : 0,
-      Date.now(),
+      now(),
     );
 
   return {

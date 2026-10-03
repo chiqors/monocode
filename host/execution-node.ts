@@ -5,6 +5,7 @@
 // completion completes the run — child nodes complete independently and never
 // end the parent run.
 import type { HarnessEvent } from "../src/integrations/harness/core/types";
+import { now } from "./determinism";
 
 export type NodeKind =
   | "root_turn"
@@ -71,7 +72,7 @@ export function freshRootNode(
     parentId: null,
     kind: "root_turn",
     status: "running",
-    startedAt: Date.now(),
+    startedAt: now(),
     endedAt: null,
   };
 }
@@ -100,7 +101,7 @@ export function applyNodeEvent(
         parentId: root.id,
         kind: "tool",
         status: "running",
-        startedAt: Date.now(),
+        startedAt: now(),
         endedAt: null,
         content: {
           ...(event.title ? { title: event.title } : {}),
@@ -127,7 +128,7 @@ export function applyNodeEvent(
           ? {
               ...node,
               status: nextStatus,
-              endedAt: Date.now(),
+              endedAt: now(),
               ...(event.detail
                 ? { content: { ...node.content, detail: event.detail } }
                 : {}),
@@ -144,7 +145,7 @@ export function applyNodeEvent(
         parentId: root.id,
         kind: "approval",
         status: "running",
-        startedAt: Date.now(),
+        startedAt: now(),
         endedAt: null,
         content: {
           requestId: event.requestId,
@@ -160,7 +161,7 @@ export function applyNodeEvent(
           ? {
               ...node,
               status: "completed" as const,
-              endedAt: Date.now(),
+              endedAt: now(),
               content: { ...node.content, decision: event.decision },
             }
           : node,

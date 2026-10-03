@@ -13,6 +13,7 @@
 // as coverage extends and handoffs accumulate.
 import type { HarnessId } from "../src/features/sessions/model/session";
 import type { HostStore } from "./store";
+import { now } from "./determinism";
 
 /** The covered run range a provider thread has seen, as run ordinals. */
 export type ProviderThread = {
@@ -36,7 +37,7 @@ export function recordProviderThread(
   store: HostStore,
   thread: Omit<ProviderThread, "createdAt"> & { createdAt?: number },
 ): void {
-  const now = thread.createdAt ?? Date.now();
+  const timestamp = thread.createdAt ?? now();
   store.db
     .prepare(
       `INSERT INTO provider_threads
@@ -55,7 +56,7 @@ export function recordProviderThread(
       thread.firstRunOrdinal,
       thread.lastRunOrdinal,
       JSON.stringify(thread.handoffIds),
-      now,
+      timestamp,
     );
 }
 

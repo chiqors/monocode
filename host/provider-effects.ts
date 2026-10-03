@@ -6,6 +6,7 @@
 // the in-memory-only reactor + retry for the effects that must survive a
 // restart.
 import type { HostStore } from "./store";
+import { now } from "./determinism";
 
 export type ProviderEffectKind =
   | "turn.start"
@@ -44,7 +45,7 @@ export function enqueueProviderEffect(
       effect.runId,
       effect.kind,
       effect.payload == null ? null : JSON.stringify(effect.payload),
-      Date.now(),
+      now(),
     );
 }
 

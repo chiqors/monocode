@@ -8,7 +8,6 @@
 // (native fork when possible, else portable context / Handoff summary).
 // Forks are only made from STABLE source points (a terminal fork-at run, or
 // an idle thread); forking from an active run is rejected.
-import { randomUUID } from "node:crypto";
 import type { HostStore } from "./store";
 import { buildRunHandoffSummary, recordHandoff } from "./handoff-summary";
 import {
@@ -16,6 +15,7 @@ import {
   pendingForkTransfer,
   resolveForkTransfer,
 } from "./context-transfer";
+import { now, uuid } from "./determinism";
 
 export type ForkResult = {
   sessionId: string;
@@ -90,8 +90,8 @@ export function forkThread(
     }
   }
   const blocks = visibleBlocks.slice(0, forkIndex);
-  const now = Date.now();
-  const forkId = randomUUID();
+  const timestamp = now();
+  const forkId = uuid();
 
   store.db
     .prepare(
@@ -108,8 +108,8 @@ export function forkThread(
           id: forkId,
           blocks,
         },
-        createdAt: now,
-        updatedAt: now,
+        createdAt: timestamp,
+        updatedAt: timestamp,
         status: "idle",
       }),
       JSON.stringify({ id: forkId }),
@@ -189,7 +189,7 @@ export function mergeBack(
     {
       ...source,
       revision: source.revision + 1,
-      updatedAt: Date.now(),
+      updatedAt: now(),
       session: { ...source.session, blocks: merged },
     },
     { type: "merge-back", from: forkSessionId },

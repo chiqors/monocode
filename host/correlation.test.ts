@@ -4,7 +4,7 @@
 // primary; provider-native ids (providerSessionId etc.) are refs in a durable
 // correlation record. Replaying the same transcript finds existing bindings.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,9 +18,11 @@ import {
   type ProviderBinding,
   type CorrelationStrategy,
 } from "./correlation";
+import { setClock, resetDeterminism } from "./determinism";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
+  resetDeterminism();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -238,7 +240,11 @@ describe("identity through the replay harness", () => {
       sessionId: created.sessionId,
       text: "hello",
     });
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    setClock(() => 1_700_000_000_000);
+    await vi.waitFor(
+      () => expect(store.runs(created.sessionId)[0]?.status).toBe("completed"),
+      { timeout: 2_000 },
+    );
 
     // The session still carries the ref for provider use (it is a ref, evidence),
     // and the durable correlation table records it app-id-first.
@@ -279,7 +285,10 @@ describe("identity through the replay harness", () => {
       sessionId: created.sessionId,
       text: "hello",
     });
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await vi.waitFor(
+      () => expect(store.runs(created.sessionId)[0]?.status).toBe("completed"),
+      { timeout: 2_000 },
+    );
 
     const bindings = store.db
       .prepare(
