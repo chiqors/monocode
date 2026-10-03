@@ -22,6 +22,8 @@ export type Run = {
   status: RunStatus;
   startedAt: number;
   endedAt: number | null;
+  /** How many times this run was attempted (steering/restart increments). */
+  attempts: number;
   /** User-visible prompt text; null for compaction turns. */
   message: string | null;
 };

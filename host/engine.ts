@@ -37,6 +37,10 @@ import {
   type RunLifecycle,
 } from "./run-normalizer";
 import { bindProviderRef } from "./correlation";
+import {
+  applyNodeEvent,
+  freshRootNode,
+} from "./execution-node";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -639,8 +643,13 @@ export class HostEngine {
             status: "running",
             startedAt,
             endedAt: null,
+            attempts: 1,
             message: command.type === "compact" ? null : command.text,
           });
+          // The root execution node for this run, created alongside the run.
+          this.store.upsertNode(
+            freshRootNode(value.session.id, runId),
+          );
           effect = (saved) => {
             this.run(
               saved,
@@ -801,6 +810,7 @@ export class HostEngine {
     attachments: Session["blocks"][number]["attachments"] = [],
   ): void {
     const { session, runId } = value;
+    const activeRunId = runId!;
     const provider = this.provider(session.harness);
     const active = { runId: runId!, done: Promise.resolve(), cancelled: false, persistenceFailed: false };
     this.running.set(session.id, active);
@@ -873,6 +883,22 @@ export class HostEngine {
               endedAt: Date.now(),
             });
           }
+          // Finalize the root node alongside the run: completed only when the
+          // run's lifecycle reached completed, otherwise interrupted. Child
+          // nodes are left as-is (they complete independently).
+          const rootNode = this.store
+            .nodesForRun(session.id, activeRunId)
+            .find((node) => node.parentId === null);
+          if (rootNode && rootNode.status === "running") {
+            this.store.upsertNode({
+              ...rootNode,
+              status:
+                finalLifecycle?.status === "completed"
+                  ? ("completed" as const)
+                  : ("interrupted" as const),
+              endedAt: Date.now(),
+            });
+          }
           this.save(
             this.settled(
               latest,
@@ -931,6 +957,16 @@ export class HostEngine {
         });
       }
       live.runLifecycle = lifecycle;
+    }
+    // Execution graph: fold the event into the node tree. The reduction
+    // returns rootCompleted=true ONLY when the root node completed, which is
+    // what drives the run to terminal (root-only completion).
+    const reduction = applyNodeEvent(
+      this.store.nodesForRun(id, runId),
+      event,
+    );
+    if (reduction.nodes.length) {
+      for (const node of reduction.nodes) this.store.upsertNode(node);
     }
     if (session === live.value.session) return;
     live.value = { ...live.value, session };

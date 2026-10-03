@@ -12,6 +12,7 @@ import type {
 import type { LinkedWorkItem } from "../src/features/sessions/model/session";
 import { sessionNeedsInput } from "../src/features/sessions/model/session";
 import type { Run } from "./run-normalizer";
+import type { ExecutionNode } from "./execution-node";
 
 const CACHED_SESSIONS = 32;
 
@@ -54,6 +55,25 @@ export class HostStore {
       created_at INTEGER NOT NULL,
       PRIMARY KEY (app_entity_kind, app_entity_id, provider)
     );`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS execution_nodes (
+      id TEXT NOT NULL,
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      run_id TEXT NOT NULL,
+      parent_id TEXT,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      PRIMARY KEY (session_id, id)
+    );`);
+    // Run attempts: a run restarted via steering has more than one attempt.
+    const runColumns = this.db.prepare("PRAGMA table_info(runs)").all() as {
+      name: string;
+    }[];
+    if (!runColumns.some((column) => column.name === "attempts"))
+      this.db.exec(
+        "ALTER TABLE runs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1",
+      );
     const columns = this.db.prepare("PRAGMA table_info(sessions)").all();
     if (!columns.some((column) => column.name === "summary"))
       this.db.exec("ALTER TABLE sessions ADD COLUMN summary TEXT");
@@ -134,13 +154,14 @@ export class HostStore {
   upsertRun(sessionId: string, run: Run): void {
     this.db
       .prepare(
-        `INSERT INTO runs (id, session_id, ordinal, status, started_at, ended_at, message)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO runs (id, session_id, ordinal, status, started_at, ended_at, message, attempts)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id, id) DO UPDATE SET
            status=excluded.status,
            started_at=excluded.started_at,
            ended_at=excluded.ended_at,
-           message=excluded.message`,
+           message=excluded.message,
+           attempts=excluded.attempts`,
       )
       .run(
         run.id,
@@ -150,6 +171,7 @@ export class HostStore {
         run.startedAt,
         run.endedAt,
         run.message,
+        run.attempts,
       );
   }
 
@@ -157,9 +179,51 @@ export class HostStore {
   runs(sessionId: string): Run[] {
     return this.db
       .prepare(
-        "SELECT id, session_id AS sessionId, ordinal, status, started_at AS startedAt, ended_at AS endedAt, message FROM runs WHERE session_id=? ORDER BY ordinal ASC",
+        "SELECT id, session_id AS sessionId, ordinal, status, started_at AS startedAt, ended_at AS endedAt, message, attempts FROM runs WHERE session_id=? ORDER BY ordinal ASC",
       )
       .all(sessionId) as unknown as Run[];
+  }
+
+  /** Upsert one execution node, merging status/ended at by (session, id). */
+  upsertNode(node: ExecutionNode): void {
+    this.db
+      .prepare(
+        `INSERT INTO execution_nodes
+           (id, session_id, run_id, parent_id, kind, status, started_at, ended_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id, id) DO UPDATE SET
+           status=excluded.status,
+           ended_at=excluded.ended_at,
+           started_at=excluded.started_at`,
+      )
+      .run(
+        node.id,
+        node.sessionId,
+        node.runId,
+        node.parentId,
+        node.kind,
+        node.status,
+        node.startedAt,
+        node.endedAt,
+      );
+  }
+
+  /** All execution nodes for a session, insertion order. */
+  nodes(sessionId: string): ExecutionNode[] {
+    return this.db
+      .prepare(
+        "SELECT id, session_id AS sessionId, run_id AS runId, parent_id AS parentId, kind, status, started_at AS startedAt, ended_at AS endedAt FROM execution_nodes WHERE session_id=? ORDER BY started_at ASC, rowid ASC",
+      )
+      .all(sessionId) as unknown as ExecutionNode[];
+  }
+
+  /** Nodes for a specific run. */
+  nodesForRun(sessionId: string, runId: string): ExecutionNode[] {
+    return this.db
+      .prepare(
+        "SELECT id, session_id AS sessionId, run_id AS runId, parent_id AS parentId, kind, status, started_at AS startedAt, ended_at AS endedAt FROM execution_nodes WHERE session_id=? AND run_id=? ORDER BY started_at ASC, rowid ASC",
+      )
+      .all(sessionId, runId) as unknown as ExecutionNode[];
   }
 
   summaries(projectId: string): HostSessionSummary[] {
@@ -283,6 +347,7 @@ export class HostStore {
         throw new Error("Stop this session before deleting it");
       this.db.prepare("DELETE FROM events WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM runs WHERE session_id=?").run(id);
+      this.db.prepare("DELETE FROM execution_nodes WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM sessions WHERE id=?").run(id);
       this.cache.delete(id);
     });
