@@ -1,14 +1,15 @@
 # Remaining Gaps
 
-> **Status: all gaps landed (G1a/G1b/G2/G3/G4/G5/G6 — #15–#21, closed).** Each
-> section below records the shipped implementation and the small, unticketed
-> same-shape tail. There are no open G-series tickets; the rework is complete.
+> **Status: every gap has landed — the G-series (G1a/G1b/G2/G3/G4/G5/G6,
+> #15–#21) AND the S-series stability tail (S1–S8, #22–#29) are closed.** Each
+> section below records the shipped implementation and what remains; the only
+> work still open relative to t3code V2 is the additive, harness-boundary
+> **Later Adaptations** at the bottom (no open G/S tickets; the rework is
+> complete).
 
-The rework is shipped (T1–T7, F1–F6); this document lists what is **not**
-implemented yet compared with the t3code V2 reference
-(`t3code/docs/orchestration-v2/`), verified against the current codebase. Each
-gap is a candidate for the next round of tracer-bullet tickets under
-[issue #1](https://github.com/chiqors/monocode/issues/1).
+The rework is shipped (T1–T7, F1–F6, G1a/G1b/G2/G3/G4/G5/G6, S1–S8). This
+document records what landed and the small tail that remains; every gap gated
+behind [issue #1](https://github.com/chiqors/monocode/issues/1) is closed.
 
 ## 1. ProviderThread as a first-class durable entity (the biggest gap)
 
@@ -23,11 +24,13 @@ off-provider runs (`handler: "switch-back"`, linked into the resumed thread);
 weak providers without a native cursor fall back to a full summary + fresh
 thread.
 
-**Remaining same-shape work (not ticketed):** `providerThreadId` on the session
-snapshot is still a thin optional field (`src/features/sessions/model/session.ts`);
-the frontend transcript rendering of a switch-back delta uses the existing
-handoff-block mechanism, and a future `thread/resume` call beyond `bind` is
-still on the provider side.
+**Remaining same-shape work — LANDED (S5 #26, closed):** `providerThreadId` is
+a durable Run/session graph field (`runs.provider_thread_id` +
+`Session.providerThreadId`, not a thin optional string), and the engine has an
+explicit `thread/resume` command beyond `bind` that is the one
+switch-back/fork/recovery resume path (restart-safe, no duplicate native
+thread). The frontend transcript rendering of a switch-back delta still uses
+the existing handoff-block mechanism; nothing provider-side remains here.
 
 **t3code V2:** `ProviderThread` is a durable object with a resume cursor
 (`nativeThreadRef`), per-provider coverage (`coveredRunRange`,
@@ -50,10 +53,12 @@ fork's first dispatch (`host/engine.ts`) resolves the transfer via
 `resolveForkOnFirstDispatch` — materializing the portable context (a
 reviewable Handoff summary derived from the run store) exactly once.
 
-**Remaining same-shape work (not ticketed):** a provider-native fork RPC
-(beyond OpenCode's client-side `forkSession`) is still the preferred
-resolution path when a harness exposes one; G3 will extend the stable-point
-policy to checkpoints.
+**Remaining same-shape work — LANDED (S2 #23 + S3 #24, closed):** native fork
+is wired through the engine + adapters — the fork's first dispatch now prefers
+the provider's native fork RPC when available (OpenCode `forkSession` first,
+`native_fork` resolution recorded on the pending `ContextTransfer`), falling
+back to portable context otherwise; stable source points now include captured
+checkpoint scopes (S3), not just terminal runs / idle threads.
 
 **t3code V2:** forking is cheap — create the target thread + a pending
 `ContextTransfer`; no provider session/thread/context handoff until the fork's
@@ -75,11 +80,16 @@ target, marks later checkpoints rolled back (target stays captured), and
 records a `handler: "rollback"` handoff so the next switch-back delta covers
 exactly the post-rollback runs.
 
-**Remaining same-shape work (not ticketed):** the provider-native revert
-(probe `historyMode` / page `thread/turns/list` / `thread/revert`) is still
-behind the capability policy in the harness layer; checkpoint capture is
-explicit via the module API (the engine does not yet auto-capture at run
-boundaries), and G2's stable fork points can now extend to checkpoints.
+**Remaining same-shape work — LANDED (S4 #25 + S3 #24, closed):** checkpoint
+capture is now engine-driven — a root `CheckpointScope` + pre-run baseline is
+auto-created at run start and auto-captured at run terminal (completed /
+interrupted), idempotent and deterministic under replay; and provider-native
+rollback is wired through the capability gate — a `rollback` command probes
+`historyMode` + the native revert RPC (`OpenCode revertSession` at the target
+run's user message; `thread/turns/list` / `thread/revert` handled explicitly
+or a typed capability error), reconciling the provider snapshot into durable
+state via `rollbackThread`; paginated/no-RPC harnesses degrade through the
+policy (host reconcile still runs).
 
 **t3code V2:** nested `CheckpointScope`s with `advancesAppRunCount`; pre-run
 baseline + post-run capture; provider rollback returns a snapshot that is
@@ -99,10 +109,10 @@ same transcript twice yields identical durable state; the existing correlation
 replay tests were migrated off `setTimeout` to the injected clock +
 `vi.waitFor`.
 
-**Remaining same-shape work (not ticketed):** genuinely time-based paths stay
-real (`delegate-task` wait-mode deadline, `server.ts`/`workspace-commands.ts`/
+**Deliberate non-goal (no open work):** genuinely time-based paths stay real
+(`delegate-task` wait-mode deadline, `server.ts`/`workspace-commands.ts`/
 `sync-transfer.ts` cache TTLs, `orchestration-graph.ts` default) — those are
-wait/UX paths, not replay state.
+wait/UX paths, not replay state, and changing them would be wrong.
 
 **t3code V2:** production reads time through a testable clock and allocates
 ids through a testable random layer (Effect `TestClock`/`Random`), so replay
@@ -121,10 +131,13 @@ without cancelling the child). Results still integrate into the Lead via the
 capability degradation (`policy: native|synthetic`) preserved. The agent-app
 surface forwards `mode`/`timeoutMs` and exposes `task_status`/`task_cancel`.
 
-**Remaining same-shape work (not ticketed):** the remote `task.status` /
-`task.cancel` machine bridge is wired in `App.tsx` for remote sessions (local
-path fails loudly); `task_status`'s foreign-parent rejection is host-side
-(the row is only readable by taskId).
+**Remaining same-shape work — LANDED (S8 #29, closed):** `task.status` /
+`task.cancel` now work for local AND remote through the host RPC + the same
+durable `delegated_tasks` store (taskId-scoped, structured result, idempotent
+cancel); the remote bridge allowlist (`src-tauri/src/remote.rs`) permits
+`delegate.task` / `task.status` / `task.cancel`; `App.tsx` errors name the
+real constraint when a host connection is absent (Rust-native local sessions
+have no delegated-task store).
 
 **t3code V2:** a delegated task returns a structured `subagent_result`
 context transfer (durable task state: `taskId`, `childThreadId`,
@@ -143,29 +156,65 @@ native exact → scoped → ordinal → fingerprint, with
 `session.providerBound`. Existing boolean capability consumers and the
 original degradation policies are untouched.
 
-**Remaining same-shape work (not ticketed):** ordinal-tier correlation is a
-stored strategy (tested) but the current picker maps weak→native_scoped;
-per-adapter tier values beyond the optimistic defaults are set via
-`capabilitiesFor` overrides.
+**Remaining same-shape work — LANDED (S6 #27, closed):** the picker now returns
+`ordinal` for the ordinal-addressable mid tier (`IdentityTier "ordinal"`,
+`pickCorrelationStrategy("ordinal") → "ordinal"` — no longer dead code), and
+per-adapter tiers are set in `DEFAULTS` from observed behavior
+(`pi`/`omp`/`fx`/`hermes`/`antigravity` → ordinal + estimated; strong/terminal
+kept for codex/claude/cursor/grok/opencode), so `degradePolicy` /
+`pickCorrelationStrategy` no longer overclaim on weak providers.
 
 **t3code V2:** versioned per-adapter capability reports with quality tiers
 (`terminalStatusQuality`, `identity: strong|weak|none`) and scoped
 correlation keys (native exact → scoped → ordinal → fingerprint, with
 `nativeKind` + scope on each binding).
 
-**MonoCode today:** boolean `CapabilityFlags` with optimistic defaults
-(`host/capabilities.ts`) and a flat `provider_bindings(kind, id, provider) →
-ref` map with a single strategy (`host/correlation.ts`). Sufficient for the
-shipped verticals; the richer shape is deferred.
+**MonoCode shipped (G6 + S6):** versioned + tiered `CapabilityFlags` with
+per-adapter verified tiers (`host/capabilities.ts` `DEFAULTS`) and scoped
+`provider_bindings` with the full native exact → scoped → ordinal → fingerprint
+strategy set (`host/correlation.ts`). No deferred richer shape remains.
 
-## Suggested priority
+## Landed status
 
-1. **ProviderThread + delta-handoff resume** (gap 1) — the closest to the
-   shipped `pendingSwitch` work, biggest user-visible win.
-2. **Stable source points + lazy fork** (gap 2) — cheap to add to
-   `host/fork-merge.ts`.
-3. **Scoped correlation tiers** (gap 6) — extend `provider_bindings`.
-4. **Checkpoint scopes** (gap 3) and **structural delegation** (gap 5) —
-   larger; t3code V2 itself treats nested checkpoints as a later concern.
-5. **Deterministic clock/id layer** (gap 4) — infrastructure that unlocks
-   stronger replay tests for all of the above.
+Every gap in this document has landed. The S-series closed the last same-shape
+tails on top of the G-series:
+
+| Gap | Root ticket | Stability tail | S-ticket |
+|---|---|---|---|
+| 1. ProviderThread + delta-handoff resume | #15/#16 (G1a/G1b) | `providerThreadId` durable + engine `thread/resume` | #26 (S5) |
+| 2. Lazy fork + stable source points | #17 (G2) | native-fork wiring through engine/adapters; checkpoint stable points | #23/#24 (S2/S3) |
+| 3. CheckpointScope + rollback reconciliation | #19 (G3) | engine auto-capture at run boundaries; provider-native rollback + capability gate | #24/#25 (S3/S4) |
+| 4. Replay-first deterministic time/ids | #21 (G4) | — (no tail) | — |
+| 5. Structural delegation results | #20 (G5) | local + remote `task.status`/`task.cancel` parity | #29 (S8) |
+| 6. Rich capability shape + scoped correlation | #18 (G6) | per-adapter tiers + `ordinal` picker | #27 (S6) |
+
+Headline S-series evidence: `host/checkpoint-auto.test.ts`, `host/thread-resume.test.ts`,
+`host/rollback-native.test.ts`, `host/capability-tiers.test.ts`, `host/replay-corpus.test.ts`,
+`host/task-bridge.test.ts`; full host suite **210 passed / 5 skipped**; commits
+`287f83f`..`c416b36` on `refactor/orchestrator-v2`.
+
+## Later Adaptations (the only work still open — additive, harness-boundary)
+
+Matching the spec ticket's Out of Scope, the remaining work relative to t3code
+V2 is additive and sits at the adapter/transport edge. Kit the host graph; each
+is its own ticket stack and can land in parallel:
+
+- **ACP (Agent Client Protocol).** `src/integrations/harness/core/acp.ts` is a
+   thin JSON-RPC client; there is no ACP-powered harness adapter yet (cursor
+   uses `cursorAdapter`). Add an ACP adapter + registry entry, session/thread
+   bind, approvals/questions, replays, and catalog. **~5–8 tickets.**
+- **MCP server for agents to drive MonoCode.** The host functions exist
+   (`delegateTask`/`taskStatus`/`taskCancel`) and the `/operator` CLI surface
+   exists; a real authenticated MCP/HTTP ingress with command receipts +
+   idempotency (`clientRequestId`) and `create_threads`/`thread_launch`/list/
+   read/send/wait/interrupt is not built. Mostly transport + auth + receipts.
+   **~3–5 tickets.**
+- **OpenCode 2.** The adapter pins `MINIMUM_OPENCODE_VERSION = "1.14.19"` and
+   uses the v1 HTTP client. OpenCode 2 changes the protocol (server streaming,
+   session API, security); needs a protocol bump, normalizer adjustments, new
+   replay fixtures, and resume-correlation re-verification. **~4–6 tickets.**
+- **New harnesses / providers.** `registerBuiltinHarnesses()` in
+   `src/integrations/harness/core/register.ts` is the explicit registry (claude,
+   cursor, codex, grok, opencode, pi, omp, fx, hermes, antigravity). Each new
+   harness = one `HarnessAdapter` + catalog + replay fixture + capability
+   defaults. **~3–5 tickets per harness.**
