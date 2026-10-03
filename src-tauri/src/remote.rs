@@ -371,6 +371,10 @@ fn supported_remote_method(method: &str) -> bool {
             | "sessions.sync"
             | "sessions.syncChunk"
             | "commands.dispatch"
+            // S8: delegation surfaces (same structured result shape as local).
+            | "delegate.task"
+            | "task.status"
+            | "task.cancel"
             | "attachments.upload"
             | "attachments.read"
             | "devices.revokeSelf"

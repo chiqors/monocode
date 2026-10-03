@@ -432,6 +432,42 @@ export function createHostServer(
             });
             break;
           }
+          case "task.status": {
+            const { taskStatus } = await import("./delegate-task");
+            const taskId = String(params.taskId ?? "");
+            if (typeof taskId !== "string" || !taskId)
+              throw new Error("Invalid task id");
+            const value = taskStatus(engine.store, taskId);
+            // S8: local + remote share the same taskId-scoped durable store —
+            // an unknown task fails loudly (foreign/unowned ids are rejected),
+            // never silently fabricated.
+            if (!value) throw new Error(`Unknown task ${taskId}`);
+            result = {
+              taskId: value.taskId,
+              childThreadId: value.childThreadId,
+              childSessionId: value.childSessionId,
+              childRunId: value.childRunId,
+              childNodeId: value.childNodeId,
+              status: value.status,
+              workState: value.workState,
+              summary: value.summary,
+              latestTerminalStatus: value.latestTerminalStatus,
+              latestTerminalSummary: value.summary,
+              waitTimedOut: value.waitTimedOut,
+              resultContextTransferId: value.resultContextTransferId,
+            };
+            break;
+          }
+          case "task.cancel": {
+            const { taskCancel } = await import("./delegate-task");
+            const taskId = String(params.taskId ?? "");
+            if (typeof taskId !== "string" || !taskId)
+              throw new Error("Invalid task id");
+            const value = taskCancel(engine.store, engine, taskId);
+            // Idempotent for terminal tasks (same store + shape as remote).
+            result = { taskId: value.taskId, cancelled: value.cancelled };
+            break;
+          }
           case "attachments.upload":
             result = writeAttachmentChunk(engine.store, params);
             break;

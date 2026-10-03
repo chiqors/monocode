@@ -9393,7 +9393,7 @@ function Workspace({
                 : undefined;
               if (!machine)
                 throw new Error(
-                  "Delegate_task is unavailable for local sessions yet (local delegation needs the in-process orchestrator path).",
+                  "Delegate_task needs a MonoCode Host connection for this project (local Rust-native sessions have no delegated-task store).",
                 );
               return remoteRequest<{
                 taskId: string;
@@ -9426,7 +9426,9 @@ function Workspace({
                 ? await remoteMachineFor(environment)
                 : undefined;
               if (!machine)
-                throw new Error("Task status is unavailable for local sessions yet.");
+                throw new Error(
+                  "Task status needs a MonoCode Host connection for this project (local Rust-native sessions have no delegated-task store).",
+                );
               return remoteRequest<{
                 taskId: string;
                 childThreadId: string;
@@ -9445,7 +9447,9 @@ function Workspace({
                 ? await remoteMachineFor(environment)
                 : undefined;
               if (!machine)
-                throw new Error("Task cancel is unavailable for local sessions yet.");
+                throw new Error(
+                  "Task cancel needs a MonoCode Host connection for this project (local Rust-native sessions have no delegated-task store).",
+                );
               return remoteRequest<{
                 taskId: string;
                 cancelled: boolean;
