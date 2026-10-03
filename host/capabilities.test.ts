@@ -17,7 +17,6 @@ import {
   type DegradationPolicy,
   capabilitiesFor,
   degradePolicy,
-  defaultsFor,
   DEFAULTS,
 } from "./capabilities";
 

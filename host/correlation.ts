@@ -53,6 +53,8 @@ export function pickCorrelationStrategy(tier: IdentityTier): CorrelationStrategy
   switch (tier) {
     case "strong":
       return "native_exact";
+    case "ordinal":
+      return "ordinal";
     case "weak":
       return "native_scoped";
     case "none":

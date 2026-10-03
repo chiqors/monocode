@@ -23,7 +23,7 @@ export type DegradationPolicy =
   | "unavailable";
 
 /** How reliably a provider's native ids can be correlated to app entities. */
-export type IdentityTier = "strong" | "weak" | "none";
+export type IdentityTier = "strong" | "ordinal" | "weak" | "none";
 
 /** How reliably a provider reports terminal run status. */
 export type TerminalStatusQuality = "terminal" | "estimated" | "unknown";
@@ -78,18 +78,48 @@ export const DEFAULT_CAPABILITIES: CapabilityFlags = {
 
 const name = "DEFAULTS";
 
-/** Per-harness capability overrides (only where a provider lacks something). */
+/**
+ * Per-harness capability overrides (only where a provider differs from the
+ * optimistic strong/terminal default). S6 sets VERIFIED tiers from observed
+ * provider behavior:
+ * - codex / claude / opencode / cursor / grok: stable native conversation ids
+ *   + a terminal lifecycle event → strong identity + terminal quality.
+ * - fx / hermes / antigravity (ACP/other): native ids exist but are
+ *   ordinal/positional, and terminal status is estimated → ordinal identity +
+ *   estimated terminal quality (never overclaim native_exact / terminal).
+ * - pi / omp: RPC-based, ids are ordinal, lifecycle is estimated.
+ */
 export const DEFAULTS: Array<[HarnessId, CapabilityFlags]> = [
   ["claude", DEFAULT_CAPABILITIES],
   ["codex", DEFAULT_CAPABILITIES],
   ["cursor", DEFAULT_CAPABILITIES],
   ["grok", DEFAULT_CAPABILITIES],
   ["opencode", DEFAULT_CAPABILITIES],
-  ["pi", DEFAULT_CAPABILITIES],
-  ["omp", DEFAULT_CAPABILITIES],
-  ["fx", DEFAULT_CAPABILITIES],
-  ["hermes", DEFAULT_CAPABILITIES],
-  ["antigravity", DEFAULT_CAPABILITIES],
+  ["pi", {
+    ...DEFAULT_CAPABILITIES,
+    identity: "ordinal",
+    terminalStatusQuality: "estimated",
+  }],
+  ["omp", {
+    ...DEFAULT_CAPABILITIES,
+    identity: "ordinal",
+    terminalStatusQuality: "estimated",
+  }],
+  ["fx", {
+    ...DEFAULT_CAPABILITIES,
+    identity: "ordinal",
+    terminalStatusQuality: "estimated",
+  }],
+  ["hermes", {
+    ...DEFAULT_CAPABILITIES,
+    identity: "ordinal",
+    terminalStatusQuality: "estimated",
+  }],
+  ["antigravity", {
+    ...DEFAULT_CAPABILITIES,
+    identity: "ordinal",
+    terminalStatusQuality: "estimated",
+  }],
 ];
 
 /** Look up capability flags for a harness, with optional per-provider overrides. */
@@ -109,10 +139,11 @@ export function degradePolicy(
 ): DegradationPolicy {
   // G6: tiered capabilities are only "supported" at their strongest tier.
   // `identity` is a tier (strong|weak|none): only strong identity is fully
-  // supported (native_exact correlation); weak/none degrade to synthetic
-  // correlation. `terminalStatusQuality` is a tier (terminal|estimated|
-  // unknown): only terminal quality is supported; estimated/unknown mean the
-  // provider cannot be trusted to drive terminal-only optimizations.
+  // supported (native_exact correlation); ordinal/weak/none degrade to
+  // synthetic/ordinal correlation. `terminalStatusQuality` is a tier
+  // (terminal|estimated|unknown): only terminal quality is supported;
+  // estimated/unknown mean the provider cannot be trusted to drive
+  // terminal-only optimizations.
   if (action === "identity") {
     return caps.identity === "strong" ? "supported" : "synthetic_user_message";
   }
