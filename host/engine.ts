@@ -45,6 +45,7 @@ import {
   buildRunHandoffSummary,
   recordHandoff,
 } from "./handoff-summary";
+import { capabilitiesFor, degradePolicy } from "./capabilities";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -563,10 +564,16 @@ export class HostEngine {
         } else if (command.type === "send" || command.type === "compact") {
           if (value.status === "running")
             throw new Error("This session is already running");
-          if (command.type === "compact" && !provider.compact)
-            throw new Error(
-              "Context compaction is unavailable for this provider",
+          if (command.type === "compact") {
+            const policy = degradePolicy(
+              capabilitiesFor(value.session.harness),
+              "rollback",
             );
+            if (!provider.compact || policy === "unavailable")
+              throw new Error(
+                "Context compaction is unavailable for this provider",
+              );
+          }
           const draft =
             command.type === "send" && command.draftBlockId
               ? value.session.blocks.find(
