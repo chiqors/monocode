@@ -1,5 +1,9 @@
 # Remaining Gaps
 
+> **Status: all gaps landed (G1a/G1b/G2/G3/G4/G5/G6 — #15–#21, closed).** Each
+> section below records the shipped implementation and the small, unticketed
+> same-shape tail. There are no open G-series tickets; the rework is complete.
+
 The rework is shipped (T1–T7, F1–F6); this document lists what is **not**
 implemented yet compared with the t3code V2 reference
 (`t3code/docs/orchestration-v2/`), verified against the current codebase. Each
@@ -83,13 +87,26 @@ reconciled (probe `historyMode`, page `thread/turns/list`, `thread/revert`).
 
 ## 4. Replay-first deterministic time / ids
 
+**Landed (G4 #21, closed).** `host/determinism.ts` is the testable
+clock/id seam (the Effect `TestClock`/`Random` analogue): `now()`/`uuid()`
+(real `Date.now`/`crypto.randomUUID` by default), `setClock`/`setIdAllocator`,
+`resetDeterminism`. The deterministic core (`store.ts`, `engine.ts`,
+`execution-node.ts`) and the G-series modules (`checkpoint.ts`,
+`context-transfer.ts`, `correlation.ts`, `fork-merge.ts`, `handoff-summary.ts`,
+`provider-effects.ts`, `provider-thread.ts`, `rollback.ts`,
+`delegate-task.ts`) read time/ids through the seam. A replay test proves the
+same transcript twice yields identical durable state; the existing correlation
+replay tests were migrated off `setTimeout` to the injected clock +
+`vi.waitFor`.
+
+**Remaining same-shape work (not ticketed):** genuinely time-based paths stay
+real (`delegate-task` wait-mode deadline, `server.ts`/`workspace-commands.ts`/
+`sync-transfer.ts` cache TTLs, `orchestration-graph.ts` default) — those are
+wait/UX paths, not replay state.
+
 **t3code V2:** production reads time through a testable clock and allocates
 ids through a testable random layer (Effect `TestClock`/`Random`), so replay
 assertions are stable.
-
-**MonoCode today:** the normalizer, node reducer, and store use `Date.now()`
-and `crypto.randomUUID()` directly; tests use real timers and small waits.
-Adding a deterministic clock/id layer would strengthen replay determinism.
 
 ## 5. Structural delegation results
 
