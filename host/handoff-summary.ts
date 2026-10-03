@@ -79,14 +79,15 @@ export function buildRunHandoffSummary(
 export function recordHandoff(
   store: HostStore,
   record: Omit<HandoffRecord, "id" | "createdAt">,
-): void {
+): string {
+  const id = crypto.randomUUID();
   store.db
     .prepare(
       `INSERT INTO handoffs (id, session_id, provider, run_ordinal, handler, summary, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
-      crypto.randomUUID(),
+      id,
       record.sessionId,
       record.provider,
       record.runOrdinal,
@@ -94,6 +95,7 @@ export function recordHandoff(
       record.summary,
       Date.now(),
     );
+  return id;
 }
 
 function oneLine(value: string): string {

@@ -55,6 +55,19 @@ export class HostStore {
       created_at INTEGER NOT NULL,
       PRIMARY KEY (app_entity_kind, app_entity_id, provider)
     );`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS provider_threads (
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      provider TEXT NOT NULL,
+      native_thread_ref TEXT,
+      first_run_ordinal INTEGER,
+      last_run_ordinal INTEGER,
+      handoff_ids TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (session_id, provider)
+    );`);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_provider_threads_session ON provider_threads(session_id)",
+    );
     this.db.exec(`CREATE TABLE IF NOT EXISTS execution_nodes (
       id TEXT NOT NULL,
       session_id TEXT NOT NULL REFERENCES sessions(id),
@@ -370,6 +383,8 @@ export class HostStore {
       this.db.prepare("DELETE FROM events WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM runs WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM execution_nodes WHERE session_id=?").run(id);
+      this.db.prepare("DELETE FROM provider_threads WHERE session_id=?").run(id);
+      this.db.prepare("DELETE FROM handoffs WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM sessions WHERE id=?").run(id);
       this.cache.delete(id);
     });

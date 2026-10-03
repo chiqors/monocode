@@ -45,6 +45,10 @@ import {
   buildRunHandoffSummary,
   recordHandoff,
 } from "./handoff-summary";
+import {
+  recordProviderThread,
+  providerThreads,
+} from "./provider-thread";
 import { capabilitiesFor, degradePolicy } from "./capabilities";
 import {
   enqueueProviderEffect,
@@ -514,12 +518,27 @@ export class HostEngine {
               value.session.id,
             );
             const latestRun = this.store.runs(value.session.id).at(-1);
-            recordHandoff(this.store, {
+            const handoff = recordHandoff(this.store, {
               sessionId: value.session.id,
               provider: value.session.harness,
               runOrdinal: latestRun?.ordinal ?? 1,
               summary,
               handler: value.session.harness,
+            });
+            // G1a: extend the departing provider's durable thread up to the
+            // latest run (the handoff covers [.., latestRun]) and link the
+            // handoff id into it, so coverage and handoffIds are one source
+            // of truth for a later switch-back delta.
+            const departing = providerThreads(this.store, value.session.id).find(
+              (thread) => thread.provider === value.session.harness,
+            );
+            recordProviderThread(this.store, {
+              sessionId: value.session.id,
+              provider: value.session.harness,
+              nativeThreadRef: departing?.nativeThreadRef ?? null,
+              firstRunOrdinal: departing?.firstRunOrdinal ?? latestRun?.ordinal ?? 1,
+              lastRunOrdinal: latestRun?.ordinal ?? departing?.lastRunOrdinal ?? 1,
+              handoffIds: [...(departing?.handoffIds ?? []), handoff],
             });
           }
           value = {
@@ -689,15 +708,33 @@ export class HostEngine {
           // The counted, durable Run entity: created in the same transaction
           // as the send so the run row and the session stay consistent.
           const startedAt = Date.now();
+          const runOrdinal = this.store.runs(value.session.id).length + 1;
           this.store.upsertRun(value.session.id, {
             id: runId,
             sessionId: value.session.id,
-            ordinal: this.store.runs(value.session.id).length + 1,
+            ordinal: runOrdinal,
             status: "running",
             startedAt,
             endedAt: null,
             attempts: 1,
             message: command.type === "compact" ? null : command.text,
+          });
+          // G1a: extend the participant provider's durable thread coverage to
+          // this new run. The covered range derives from the durable run store
+          // (a delta for a later switch-back is derivable, not stored as a
+          // chain). If no thread exists yet for this provider (e.g. a weak
+          // provider that never reports a native ref), create one with the
+          // current run as its covered range start.
+          const covering = providerThreads(this.store, value.session.id).find(
+            (thread) => thread.provider === value.session.harness,
+          );
+          recordProviderThread(this.store, {
+            sessionId: value.session.id,
+            provider: value.session.harness,
+            nativeThreadRef: covering?.nativeThreadRef ?? null,
+            firstRunOrdinal: covering?.firstRunOrdinal ?? runOrdinal,
+            lastRunOrdinal: Math.max(covering?.lastRunOrdinal ?? 0, runOrdinal),
+            handoffIds: covering?.handoffIds ?? [],
           });
           // Durable effect outbox: the turn.start effect is enqueued BEFORE
           // the provider is dispatched, so a restart can resume it.
@@ -1010,6 +1047,29 @@ export class HostEngine {
         nativeRef: event.providerSessionId,
         correlation: "native_exact",
       });
+      // G1a: the durable ProviderThread records the resume cursor (the
+      // provider-native thread ref) as evidence, plus the coverage of the runs
+      // this provider has seen (the app run ordinals). The first run of this
+      // provider participates in the covered range from the current run.
+      const runs = this.store.runs(id);
+      const currentRun = runs.find((r) => r.id === runId) ?? runs.at(-1);
+      if (currentRun) {
+        const existing = providerThreads(this.store, id).find(
+          (t) => t.provider === session.harness,
+        );
+        recordProviderThread(this.store, {
+          sessionId: id,
+          provider: session.harness,
+          nativeThreadRef: event.providerSessionId,
+          firstRunOrdinal:
+            existing?.firstRunOrdinal ?? currentRun.ordinal,
+          lastRunOrdinal: Math.max(
+            existing?.lastRunOrdinal ?? 0,
+            currentRun.ordinal,
+          ),
+          handoffIds: existing?.handoffIds ?? [],
+        });
+      }
     }
     // Content-agnostic normalizer: fold the event into the run lifecycle state
     // (status transition only; content stays in blocks) and persist the run row.
