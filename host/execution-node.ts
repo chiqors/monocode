@@ -31,6 +31,18 @@ export type ExecutionNode = {
   status: NodeStatus;
   startedAt: number;
   endedAt: number | null;
+  /**
+   * Optional typed content (F5): the node's plan/tool/approval substance, so
+   * projections can show per-tool status and nested checkpoints. Absent for
+   * legacy content-agnostic runs — those stay readable and identical.
+   */
+  content?: {
+    kind?: string;
+    title?: string;
+    detail?: string;
+    requestId?: number;
+    decision?: "allow" | "deny" | "cancelled";
+  };
 };
 
 export type NodeReduction = {
@@ -90,6 +102,15 @@ export function applyNodeEvent(
         status: "running",
         startedAt: Date.now(),
         endedAt: null,
+        content: {
+          ...(event.title ? { title: event.title } : {}),
+          ...(event.kind ? { kind: event.kind } : {}),
+          ...(event.preview?.path
+            ? { detail: event.preview.path }
+            : event.preview?.title
+              ? { detail: event.preview.title }
+              : {}),
+        },
       };
       return { nodes: [...nodes, child], rootCompleted: false };
     }
@@ -107,6 +128,40 @@ export function applyNodeEvent(
               ...node,
               status: nextStatus,
               endedAt: Date.now(),
+              ...(event.detail
+                ? { content: { ...node.content, detail: event.detail } }
+                : {}),
+            }
+          : node,
+      );
+      return { nodes: next, rootCompleted: false };
+    }
+    case "approval.requested": {
+      const child: ExecutionNode = {
+        id: `approval:${event.requestId}`,
+        sessionId: root.sessionId,
+        runId: root.runId,
+        parentId: root.id,
+        kind: "approval",
+        status: "running",
+        startedAt: Date.now(),
+        endedAt: null,
+        content: {
+          requestId: event.requestId,
+          ...(event.title ? { title: event.title } : {}),
+        },
+      };
+      return { nodes: [...nodes, child], rootCompleted: false };
+    }
+    case "approval.resolved": {
+      const next = nodes.map((node) =>
+        node.kind === "approval" &&
+        node.content?.requestId === event.requestId
+          ? {
+              ...node,
+              status: "completed" as const,
+              endedAt: Date.now(),
+              content: { ...node.content, decision: event.decision },
             }
           : node,
       );
