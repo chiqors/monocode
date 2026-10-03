@@ -296,6 +296,19 @@ export class HostEngine {
     // automatically after a crash; its external effects may already exist.
     for (const value of store.sessions()) {
       if (value.status === "running") {
+        // Only the affected run is marked failed/interrupted; the thread and
+        // prior runs stay intact. Finalize the durable run row alongside the
+        // session settle so the run reflects the interruption.
+        const interruptedRun = value.runId
+          ? store.runs(value.session.id).find((r) => r.id === value.runId)
+          : undefined;
+        if (interruptedRun && interruptedRun.status === "running") {
+          store.upsertRun(value.session.id, {
+            ...interruptedRun,
+            status: "interrupted",
+            endedAt: value.updatedAt,
+          });
+        }
         this.save(
           this.settled(
             value,
