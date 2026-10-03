@@ -147,8 +147,8 @@ export function forkThread(
  * summary (the delta, derived from the run store) is built, recorded as a
  * durable reviewable handoff row, and the transfer is marked resolved. Native
  * fork (via a provider RPC) is the preferred path when available; the
- * portable-context Handoff is the fallback, exactly per t3code V2
- * ("materialize portable context"). Idempotent: calling it twice resolves
+ * portable-context Handoff is the fallback, exactly per t3code's orchestrator-v2
+ * treatment ("materialize portable context"). Idempotent: calling it twice resolves
  * only the single pending transfer.
  *
  * Returns the Handoff summary text (empty if the fork is not pending or

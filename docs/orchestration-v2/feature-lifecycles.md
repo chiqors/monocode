@@ -2,14 +2,14 @@
 
 This document describes how the core user-facing flows behave in the shipped
 implementation (T2–T7, F1–F5), as exercised by `host/*.test.ts`. Where the
-current behavior differs from the t3code V2 reference, it is flagged.
+current behavior differs from t3code's orchestrator-v2 reference, it is flagged.
 
 ## Creating a session
 
 A session (App thread) is created by `engine.command({ type: "create", ... })`
 (`host/engine.ts`): it allocates an app `sessionId`, registers the project, and
 keeps the session snapshot. No provider process is started eagerly; the first
-`send` starts the turn (the model does not have t3code V2's lazy
+`send` starts the turn (the model does not have t3code's orchestrator-v2 lazy
 provider-thread creation distinction — see remaining gaps).
 
 ## Starting a run
@@ -82,7 +82,7 @@ mergeBack(store, forkSessionId, sourceSessionId)
 Capability-driven: harnesses without native fork use the `synthetic_fork`
 degradation policy.
 
-**Difference from t3code V2:** MonoCode forks eagerly (copies blocks +
+**Difference from t3code's orchestrator-v2:** MonoCode forks eagerly (copies blocks +
 records a Handoff at fork time). V2 defers provider/context work to the fork's
 first dispatch (pending `ContextTransfer`, lazy resolution, stable source
 points). See [remaining-gaps.md](remaining-gaps.md).

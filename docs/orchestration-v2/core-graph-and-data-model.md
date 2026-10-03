@@ -174,7 +174,7 @@ legacy run without a `graph` link falls back to its own dispatch state.
 
 ## Checkpoint scopes — NOT implemented
 
-t3code V2 models nested `CheckpointScope`s. MonoCode deliberately does **not**
+t3code's orchestrator-v2 models nested `CheckpointScope`s. MonoCode deliberately does **not**
 yet: `rollback` is only a capability flag (see
 [remaining-gaps.md](remaining-gaps.md)). Node `content` is the only
 per-tool/approval substance today.

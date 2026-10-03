@@ -59,7 +59,7 @@ Native harness CLI (claude, codex, …)
 | [capability-system.md](capability-system.md) | Per-harness capability flags, degradation policy, and the UI affordance mapping. |
 | [orchestration-mcp-surface.md](orchestration-mcp-surface.md) | The app-owned `delegate_task`/MCP tool surface for cross-provider workers. |
 | [testing-strategy.md](testing-strategy.md) | The one-seam replay harness and the test suite that protects the invariants. |
-| [remaining-gaps.md](remaining-gaps.md) | What is *not* built yet vs the t3code V2 reference — the next round of tickets. |
+| [remaining-gaps.md](remaining-gaps.md) | What is *not* built yet vs t3code's orchestrator-v2 reference — the next round of tickets. |
 
 ## Implemented ticket map
 

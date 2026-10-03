@@ -85,9 +85,9 @@ the UI always reads capabilities, never the harness name.
   harness's capabilities and reports `policy: "native" | "synthetic"`
   (F4).
 
-## Difference from t3code V2
+## Difference from t3code's orchestrator-v2 treatment
 
-t3code V2's capability system is richer: versioned per-adapter capability
+t3code's orchestrator-v2 capability system is richer: versioned per-adapter capability
 reports, quality tiers (`terminalStatusQuality: strong|weak|none`,
 `identity: strong|weak|none`), and policy for many more verbs (streaming,
 approvals, planning, subagents, checkpointing, context handoff shapes).

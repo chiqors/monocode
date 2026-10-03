@@ -73,9 +73,9 @@ matching the orchestration rework's one-model rule (T7, ADR-0001).
   [core-graph-and-data-model.md](core-graph-and-data-model.md) (T7) and
   [feature-lifecycles.md](feature-lifecycles.md) (delegation).
 
-## Differences from t3code V2 (and MonoCode's own future work)
+## Differences from t3code's orchestrator-v2 (and MonoCode's own future work)
 
-t3code V2's MCP server is a full command ingress surface: `delegate_task`,
+t3code's orchestrator-v2 MCP server is a full command ingress surface: `delegate_task`,
 `task_status`, `task_cancel`, `create_threads`, `t3_thread_launch`, list/read/
 send/wait/interrupt, durable command receipts with `clientRequestId`
 idempotency, and `mode: "async" | "wait"`.

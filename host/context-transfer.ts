@@ -15,7 +15,7 @@ import { now, uuid } from "./determinism";
 export type ContextTransferState = "pending" | "resolved" | "superseded";
 export type ContextTransferType = "fork";
 
-/** How a pending fork transfer was resolved (t3code V2 resolution shape). */
+/** How a pending fork transfer was resolved (t3code's orchestrator-v2 resolution shape). */
 export type ContextTransferResolution =
   | { strategy: "native_fork"; nativeForkRef: string; summary?: string }
   | { strategy: "portable_context"; summary: string };

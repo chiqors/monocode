@@ -65,7 +65,7 @@ not allocate another entity.
 
 ## What is NOT implemented (deliberately)
 
-t3code V2 defines a richer correlation model:
+t3code's orchestrator-v2 defines a richer correlation model:
 
 - per-scope matching keys (never match a native id globally — always scoped by
   `provider + session + thread`);

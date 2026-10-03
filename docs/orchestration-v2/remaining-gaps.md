@@ -3,7 +3,7 @@
 > **Status: every gap has landed — the G-series (G1a/G1b/G2/G3/G4/G5/G6,
 > #15–#21) AND the S-series stability tail (S1–S8, #22–#29) are closed.** Each
 > section below records the shipped implementation and what remains; the only
-> work still open relative to t3code V2 is the additive, harness-boundary
+> work still open relative to t3code's orchestrator-v2 is the additive, harness-boundary
 > **Later Adaptations** at the bottom (no open G/S tickets; the rework is
 > complete).
 
@@ -32,14 +32,14 @@ switch-back/fork/recovery resume path (restart-safe, no duplicate native
 thread). The frontend transcript rendering of a switch-back delta still uses
 the existing handoff-block mechanism; nothing provider-side remains here.
 
-**t3code V2:** `ProviderThread` is a durable object with a resume cursor
+**t3code's orchestrator-v2:** `ProviderThread` is a durable object with a resume cursor
 (`nativeThreadRef`), per-provider coverage (`coveredRunRange`,
 `firstRunOrdinal`/`lastRunOrdinal`, `handoffIds`). Switching **back** to a
 prior provider defaults to **resuming that provider's previous provider
 thread** and injecting a **delta handoff** covering the off-provider runs;
 a fresh provider thread with a full summary is only the fallback.
 
-**Why it matters:** it is t3code V2's default strategy for returning to a
+**Why it matters:** it is t3code's orchestrator-v2 default strategy for returning to a
 provider, preserves native continuity, and avoids repeatedly re-summarizing.
 
 ## 2. Lazy fork resolution + stable source points
@@ -60,7 +60,7 @@ the provider's native fork RPC when available (OpenCode `forkSession` first,
 back to portable context otherwise; stable source points now include captured
 checkpoint scopes (S3), not just terminal runs / idle threads.
 
-**t3code V2:** forking is cheap — create the target thread + a pending
+**t3code's orchestrator-v2:** forking is cheap — create the target thread + a pending
 `ContextTransfer`; no provider session/thread/context handoff until the fork's
 **first dispatch**, which resolves the transfer (native fork when possible,
 else portable context). Forks only from **stable source points** (completed
@@ -91,7 +91,7 @@ or a typed capability error), reconciling the provider snapshot into durable
 state via `rollbackThread`; paginated/no-RPC harnesses degrade through the
 policy (host reconcile still runs).
 
-**t3code V2:** nested `CheckpointScope`s with `advancesAppRunCount`; pre-run
+**t3code's orchestrator-v2:** nested `CheckpointScope`s with `advancesAppRunCount`; pre-run
 baseline + post-run capture; provider rollback returns a snapshot that is
 reconciled (probe `historyMode`, page `thread/turns/list`, `thread/revert`).
 
@@ -114,7 +114,7 @@ replay tests were migrated off `setTimeout` to the injected clock +
 `sync-transfer.ts` cache TTLs, `orchestration-graph.ts` default) — those are
 wait/UX paths, not replay state, and changing them would be wrong.
 
-**t3code V2:** production reads time through a testable clock and allocates
+**t3code's orchestrator-v2:** production reads time through a testable clock and allocates
 ids through a testable random layer (Effect `TestClock`/`Random`), so replay
 assertions are stable.
 
@@ -139,7 +139,7 @@ cancel); the remote bridge allowlist (`src-tauri/src/remote.rs`) permits
 real constraint when a host connection is absent (Rust-native local sessions
 have no delegated-task store).
 
-**t3code V2:** a delegated task returns a structured `subagent_result`
+**t3code's orchestrator-v2:** a delegated task returns a structured `subagent_result`
 context transfer (durable task state: `taskId`, `childThreadId`,
 `childRunId`, `childNodeId`, `workState`, `latestTerminal*`, wait timeout,
 etc.), with `task_status`/`task_cancel` and `mode: async | wait`.
@@ -164,7 +164,7 @@ per-adapter tiers are set in `DEFAULTS` from observed behavior
 kept for codex/claude/cursor/grok/opencode), so `degradePolicy` /
 `pickCorrelationStrategy` no longer overclaim on weak providers.
 
-**t3code V2:** versioned per-adapter capability reports with quality tiers
+**t3code's orchestrator-v2:** versioned per-adapter capability reports with quality tiers
 (`terminalStatusQuality`, `identity: strong|weak|none`) and scoped
 correlation keys (native exact → scoped → ordinal → fingerprint, with
 `nativeKind` + scope on each binding).

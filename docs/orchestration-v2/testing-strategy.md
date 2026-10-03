@@ -68,9 +68,9 @@ External behavior through the seam — final projections and durable state:
 Not internal call counts, not mocked lower layers, not private helper
 invocation order.
 
-## Differences from t3code V2
+## Differences from t3code's orchestrator-v2
 
-t3code V2's testing strategy is replay-first with a **deterministic
+t3code's orchestrator-v2 testing strategy is replay-first with a **deterministic
 clock/id layer** (Effect `TestClock` / `Random`) and contract-test levels
 from raw transcript to V2 domain events.
 

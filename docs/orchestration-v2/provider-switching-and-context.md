@@ -81,7 +81,7 @@ prompts/status and is per-run).
 The summary is a **delta** of what the target provider missed (runs since it
 last participated), derived from the store each time — not stored as a chain.
 A full thread summary is the fallback when the delta is impossible (per
-CONTEXT.md). The switch flow does not yet implement t3code V2's
+CONTEXT.md). The switch flow does not yet implement t3code's orchestrator-v2 treatment of
 "return to a previous provider thread and inject delta handoff into the
 resumed provider thread" — MonoCode's current switch creates a new target
 session/context per switch (see [remaining-gaps.md](remaining-gaps.md),

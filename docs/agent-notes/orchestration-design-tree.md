@@ -15,7 +15,7 @@ t3code `apps/server/src/orchestration-v2/` + `docs/orchestration-v2/`).
 
 ## Settled decisions
 
-- **Q1 Scope: full treatment.** Bring MonoCode's orchestration to the t3code V2
+- **Q1 Scope: full treatment.** Bring MonoCode's orchestration to t3code's orchestrator-v2
   shaped model, not just selected slices.
 - **Q2 Motivation: still exploring** — the interview itself is sharpening what
   "the treatment" means; no single symptom yet.
