@@ -1,0 +1,44 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "codex",
+  "scenario": "codex-crash",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello codex"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "codex-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "codex-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless codex delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.error",
+        "message": "codex child crashed mid-turn"
+      }
+    }
+  ]
+}

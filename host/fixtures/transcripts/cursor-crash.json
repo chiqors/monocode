@@ -1,0 +1,44 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "cursor",
+  "scenario": "cursor-crash",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello cursor"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "cursor-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "cursor-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless cursor delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.error",
+        "message": "cursor child crashed mid-turn"
+      }
+    }
+  ]
+}

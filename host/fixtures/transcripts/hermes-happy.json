@@ -1,0 +1,43 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "hermes",
+  "scenario": "hermes-happy",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello hermes"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "hermes-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "hermes-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless hermes delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.completed"
+      }
+    }
+  ]
+}

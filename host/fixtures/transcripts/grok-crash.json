@@ -1,0 +1,44 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "grok",
+  "scenario": "grok-crash",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello grok"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "grok-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "grok-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless grok delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.error",
+        "message": "grok child crashed mid-turn"
+      }
+    }
+  ]
+}

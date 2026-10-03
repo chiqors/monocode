@@ -1,0 +1,43 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "claude",
+  "scenario": "claude-happy",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello claude"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "claude-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "claude-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless claude delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.completed"
+      }
+    }
+  ]
+}

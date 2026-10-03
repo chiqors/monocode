@@ -1,0 +1,43 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "opencode",
+  "scenario": "opencode-happy",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello opencode"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "opencode-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "opencode-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless opencode delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.completed"
+      }
+    }
+  ]
+}

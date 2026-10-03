@@ -1,0 +1,43 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "antigravity",
+  "scenario": "antigravity-happy",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello antigravity"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "antigravity-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "antigravity-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless antigravity delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.completed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "pi",
+  "scenario": "pi-crash",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello pi"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "pi-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "pi-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless pi delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.error",
+        "message": "pi child crashed mid-turn"
+      }
+    }
+  ]
+}

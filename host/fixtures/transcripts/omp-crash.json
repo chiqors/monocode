@@ -1,0 +1,44 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "omp",
+  "scenario": "omp-crash",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello omp"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "omp-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "omp-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless omp delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.error",
+        "message": "omp child crashed mid-turn"
+      }
+    }
+  ]
+}

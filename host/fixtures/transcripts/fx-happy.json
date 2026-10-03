@@ -1,0 +1,43 @@
+{
+  "format": "monocode-replay-v1",
+  "provider": "fx",
+  "scenario": "fx-happy",
+  "entries": [
+    {
+      "kind": "send",
+      "sessionId": "s",
+      "text": "hello fx"
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "turn.started",
+        "providerTurnId": "fx-turn-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "session.providerBound",
+        "providerSessionId": "fx-native-1"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.delta",
+        "text": "Headless fx delta"
+      }
+    },
+    {
+      "kind": "event",
+      "sessionId": "s",
+      "event": {
+        "type": "message.completed"
+      }
+    }
+  ]
+}
