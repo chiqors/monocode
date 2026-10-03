@@ -306,6 +306,17 @@ export async function spawnChild(
   const binaryPath = binaryProvider
     ? runtimeProviderBinaryPath(binaryProvider)
     : undefined;
+  const runtimeOverride = binaryProvider
+    ? getHarnessRuntimeOverride(binaryProvider)
+    : undefined;
+  const environment = runtimeOverride
+    ? {
+        ...(runtimeOverride.environment ?? {}),
+        ...(runtimeOverride.baseUrl?.trim()
+          ? { OPENAI_BASE_URL: runtimeOverride.baseUrl.trim() }
+          : {}),
+      }
+    : undefined;
   const pid = await invoke<number>("harness_spawn", {
     sessionId,
     command,
@@ -314,7 +325,7 @@ export async function spawnChild(
     account,
     binaryProvider,
     binaryPath,
-    environment: binaryProvider ? getHarnessRuntimeOverride(binaryProvider)?.environment : undefined,
+    environment,
   });
   if (typeof pid !== "number" || pid <= 0) return;
   livePid.set(sessionId, pid);
