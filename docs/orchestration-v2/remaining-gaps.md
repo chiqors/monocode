@@ -93,6 +93,21 @@ deadline) and uses the worker's **last assistant reply** as the result
 
 ## 6. Rich capability shape + scoped correlation
 
+**Landed (G6 #18, closed).** `host/capabilities.ts` `CapabilityFlags` is
+versioned + tiered (`version: 1`, `identity: strong|weak|none`,
+`terminalStatusQuality: terminal|estimated|unknown`), with tier-aware
+`degradePolicy`; `host/correlation.ts` `provider_bindings` carries
+`native_kind` + `scope` per binding and `CorrelationStrategy` covers
+native exact → scoped → ordinal → fingerprint, with
+`pickCorrelationStrategy(identityTier)` used by the engine's
+`session.providerBound`. Existing boolean capability consumers and the
+original degradation policies are untouched.
+
+**Remaining same-shape work (not ticketed):** ordinal-tier correlation is a
+stored strategy (tested) but the current picker maps weak→native_scoped;
+per-adapter tier values beyond the optimistic defaults are set via
+`capabilitiesFor` overrides.
+
 **t3code V2:** versioned per-adapter capability reports with quality tiers
 (`terminalStatusQuality`, `identity: strong|weak|none`) and scoped
 correlation keys (native exact → scoped → ordinal → fingerprint, with
