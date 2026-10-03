@@ -37,6 +37,20 @@ provider, preserves native continuity, and avoids repeatedly re-summarizing.
 
 ## 2. Lazy fork resolution + stable source points
 
+**Landed (G2 #17, closed).** `host/context-transfer.ts` records a pending
+`ContextTransfer` (type `fork`) at fork time; `host/fork-merge.ts` `forkThread`
+creates the target App thread + the transfer with **zero** provider work / no
+eager handoff, and rejects forking from a running/queued source (stable source
+points: terminal runs or an idle thread; checkpoints arrive with G3). The
+fork's first dispatch (`host/engine.ts`) resolves the transfer via
+`resolveForkOnFirstDispatch` — materializing the portable context (a
+reviewable Handoff summary derived from the run store) exactly once.
+
+**Remaining same-shape work (not ticketed):** a provider-native fork RPC
+(beyond OpenCode's client-side `forkSession`) is still the preferred
+resolution path when a harness exposes one; G3 will extend the stable-point
+policy to checkpoints.
+
 **t3code V2:** forking is cheap — create the target thread + a pending
 `ContextTransfer`; no provider session/thread/context handoff until the fork's
 **first dispatch**, which resolves the transfer (native fork when possible,
