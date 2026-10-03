@@ -32,6 +32,7 @@ export type HarnessRuntimeOverride = {
   baseUrl?: string;
   model?: string;
   environment?: Record<string, string>;
+  environmentNames?: string[];
 };
 
 const overrides = new Map<HarnessId, HarnessRuntimeOverride>();
@@ -40,7 +41,17 @@ try {
   const raw = localStorage.getItem(OVERRIDE_KEY);
   if (raw) {
     const parsed = JSON.parse(raw) as Record<string, HarnessRuntimeOverride>;
-    for (const [harness, value] of Object.entries(parsed)) overrides.set(harness as HarnessId, value);
+    const sanitized: Record<string, HarnessRuntimeOverride> = {};
+    for (const [harness, value] of Object.entries(parsed)) {
+      const safe = {
+        baseUrl: value.baseUrl,
+        model: value.model,
+        environmentNames: value.environmentNames ?? Object.keys(value.environment ?? {}),
+      };
+      overrides.set(harness as HarnessId, safe);
+      sanitized[harness] = safe;
+    }
+    localStorage.setItem(OVERRIDE_KEY, JSON.stringify(sanitized));
   }
 } catch { /* unavailable in native/headless startup */ }
 export function getHarnessRuntimeOverride(harness: HarnessId): HarnessRuntimeOverride | undefined {
@@ -50,7 +61,13 @@ export function setHarnessRuntimeOverride(harness: HarnessId, value: HarnessRunt
   overrides.set(harness, value);
   try {
     const persisted = Object.fromEntries(
-      [...overrides.entries()].map(([key, entry]) => [key, { ...entry, envValue: undefined }]),
+      [...overrides.entries()].map(([key, entry]) => [key, {
+        baseUrl: entry.baseUrl,
+        model: entry.model,
+        environmentNames: Object.keys(entry.environment ?? {}).length > 0
+          ? Object.keys(entry.environment ?? {})
+          : entry.environmentNames ?? [],
+      }]),
     );
     localStorage.setItem(OVERRIDE_KEY, JSON.stringify(persisted));
   } catch { /* ignore storage failures */ }

@@ -3743,7 +3743,11 @@ function ProviderRuntimeControl({ harness }: { harness: HarnessId }) {
   const override = getHarnessRuntimeOverride(harness) ?? {};
   const [baseUrl, setBaseUrl] = useState(override.baseUrl ?? "");
   const [environment, setEnvironment] = useState<{ name: string; value: string }[]>(
-    Object.entries(override.environment ?? {}).map(([name, value]) => ({ name, value })),
+    Object.entries(override.environment ?? {}).map(([name, value]) => ({ name, value })).concat(
+      (override.environmentNames ?? [])
+        .filter((name) => !override.environment?.[name])
+        .map((name) => ({ name, value: "" })),
+    ),
   );
   const [saved, setSaved] = useState(false);
 
@@ -3753,7 +3757,6 @@ function ProviderRuntimeControl({ harness }: { harness: HarnessId }) {
 
   const reloadConfig = () => {
     setSaved(false);
-    clearHarnessRuntimeOverride(harness);
     void inspectHarnessRuntime(harness, { refreshModels: true, force: true })
       .then((next) => {
         setBaseUrl(next.baseUrl ?? "");
@@ -3791,7 +3794,8 @@ function ProviderRuntimeControl({ harness }: { harness: HarnessId }) {
         </div>
         <label className="block"><span className="text-content/45">Endpoint override</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={runtime?.baseUrl ?? "https://api.example.com/v1"} className="mt-1 h-8 w-full rounded-md border border-content/10 bg-content/[0.04] px-2 text-content" /></label>
         <div className="space-y-1"><div className="flex items-center justify-between"><span className="text-content/45">Environment overrides</span><button type="button" className="text-[11px] text-content/70" onClick={() => setEnvironment((rows) => [...rows, { name: "", value: "" }])}>+ Add variable</button></div>{environment.map((entry, index) => <div key={`${index}-${entry.name}`} className="flex gap-1"><input value={entry.name} onChange={(event) => setEnvironment((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row))} placeholder="OPENAI_API_KEY" className="h-8 min-w-0 flex-1 rounded-md border border-content/10 bg-content/[0.04] px-2 text-content" /><input type="password" value={entry.value} onChange={(event) => setEnvironment((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, value: event.target.value } : row))} placeholder="Value" className="h-8 min-w-0 flex-1 rounded-md border border-content/10 bg-content/[0.04] px-2 text-content" /><button type="button" aria-label="Remove variable" onClick={() => setEnvironment((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}>×</button></div>)}</div>
-        <SecondaryButton onClick={() => { const values = Object.fromEntries(environment.filter((entry) => entry.name.trim()).map((entry) => [entry.name.trim(), entry.value])); if (baseUrl.trim()) values.OPENAI_BASE_URL = baseUrl.trim(); setHarnessRuntimeOverride(harness, { baseUrl: baseUrl.trim() || undefined, environment: values }); setSaved(true); }}>Save Monocode overrides</SecondaryButton>
+        <SecondaryButton onClick={() => { const values = Object.fromEntries(environment.filter((entry) => entry.name.trim()).map((entry) => [entry.name.trim(), entry.value])); if (baseUrl.trim()) values.OPENAI_BASE_URL = baseUrl.trim(); setHarnessRuntimeOverride(harness, { baseUrl: baseUrl.trim() || undefined, environment: values, environmentNames: Object.keys(values) }); setSaved(true); }}>Save Monocode overrides</SecondaryButton>
+        <SecondaryButton onClick={() => { clearHarnessRuntimeOverride(harness); setBaseUrl(""); setEnvironment([]); setSaved(true); }}>Clear Monocode overrides</SecondaryButton>
         {saved ? <span className="text-[11px] text-emerald-400">Saved. New harness launches will use these overrides.</span> : null}
         {runtime ? <RuntimeDetails runtime={runtime} /> : <span className="text-content/50">Detecting runtime…</span>}
        </div>
