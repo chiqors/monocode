@@ -2662,7 +2662,6 @@ export function Composer({
             onExited={() => setRunnerLive(false)}
           />
         ) : null}
-              interruptLabel?: string;
       </div>
     </div>
   );
