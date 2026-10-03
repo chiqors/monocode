@@ -90,7 +90,25 @@ type Storage = {
 };
 const storage: Storage = {
   save: (run) =>
-    invoke("control_save", { leadId: run.leadId, state: JSON.stringify(run) }),
+    invoke("control_save", {
+      leadId: run.leadId,
+      state: JSON.stringify({
+        ...run,
+        // ADR-0001 (one model): the orchestration run rides the execution
+        // graph. Record the graph linkage (lead run root + worker child nodes)
+        // so saves carry it forward; legacy history stays readable.
+        graph: {
+          ...((run as OrchestrationRun & { graph?: object }).graph ?? {}),
+          leadRunId: (run as OrchestrationRun & { runId?: string }).runId ?? `orchestration:${run.leadId}`,
+          workerNodeIds: Object.fromEntries(
+            (run.dispatches ?? []).map((dispatch) => [
+              dispatch.id,
+              `orchestration-worker:${dispatch.id}`,
+            ]),
+          ),
+        },
+      }),
+    }),
   load: async (id) => {
     const raw = await invoke<string | null>("control_load", { leadId: id });
     if (!raw) return null;
