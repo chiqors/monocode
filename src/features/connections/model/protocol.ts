@@ -180,6 +180,12 @@ export type HostCommand =
       forkRunOrdinal: number;
     }
   | {
+      type: "rollback";
+      commandId: string;
+      sessionId: string;
+      targetRunOrdinal: number;
+    }
+  | {
       type: "draft";
       commandId: string;
       sessionId: string;

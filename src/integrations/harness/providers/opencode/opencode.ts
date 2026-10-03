@@ -213,6 +213,47 @@ export async function rewindOpenCodeLastTurn(
   return { submitted: false };
 }
 
+/**
+ * S4: provider-native rollback (rewind) to an app run ordinal. OpenCode's
+ * `revertSession` rewinds the conversation to a given user-message id. The
+ * app maps the target run ordinal to the message to revert: for a rollback to
+ * an earlier run, we revert to that run's user message. (The exact ordinal →
+ * message mapping is derived by the app from the run store; the harness
+ * exposes the rewind + the history-mode probe.)
+ */
+export async function rollbackOpenCodeToRun(
+  sessionId: string,
+  targetRunOrdinal: number,
+): Promise<void> {
+  const live = liveByThread.get(sessionId);
+  if (!live) throw new Error("OpenCode session is not live");
+  await live.turns;
+  if (live.activeTurn) {
+    throw new Error("Stop the current turn before rolling back");
+  }
+  // Rewind to the target run's user message: OpenCode revertSession reverts
+  // to (and removes) the given message, so pass the latest message BEFORE the
+  // target run (the message at the target run starts the retained history).
+  const messages = await live.client.getMessages(live.openCodeSessionId);
+  const userMessages = messages.flatMap((message) => {
+    const info = asRecord(message.info);
+    if (stringField(info, "role") !== "user") return [];
+    const id = stringField(info, "id");
+    const created = asRecord(info?.time)?.created;
+    return id
+      ? [{ id, created: typeof created === "number" ? created : undefined }]
+      : [];
+  });
+  const target = userMessages[targetRunOrdinal - 1];
+  if (!target) throw new Error(`No user message for run ${targetRunOrdinal}`);
+  await live.client.revertSession(live.openCodeSessionId, target.id);
+}
+
+/** OpenCode uses the legacy (non-paginated) session API: native revert ok. */
+export function openCodeHistoryMode(): Promise<"legacy" | "paginated"> {
+  return Promise.resolve("legacy" as const);
+}
+
 async function latestOpenCodeUserMessageId(live: Live): Promise<string> {
   const messages = await live.client.getMessages(live.openCodeSessionId);
   const candidates = messages.flatMap((message) => {

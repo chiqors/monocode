@@ -37,6 +37,8 @@ export {
   compactOpenCodeContext,
   rewindOpenCodeLastTurn,
   forkOpenCodeSession,
+  rollbackOpenCodeToRun,
+  openCodeHistoryMode,
   cancelOpenCodeTurn,
   respondOpenCodeApproval,
   respondOpenCodeQuestion,

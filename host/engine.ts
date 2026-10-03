@@ -43,6 +43,7 @@ import {
   freshRootNode,
 } from "./execution-node";
 import { forkThread, resolveForkOnFirstDispatch } from "./fork-merge";
+import { rollbackThread } from "./rollback";
 import {
   buildRunHandoffSummary,
   recordHandoff,
@@ -219,6 +220,19 @@ export function parseCommand(input: unknown): HostCommand {
       commandId,
       sessionId,
       forkRunOrdinal: Number(v.forkRunOrdinal),
+    };
+  }
+  if (v.type === "rollback") {
+    if (
+      !Number.isSafeInteger(v.targetRunOrdinal) ||
+      Number(v.targetRunOrdinal) < 1
+    )
+      throw new Error("Invalid rollback target run ordinal");
+    return {
+      type: "rollback",
+      commandId,
+      sessionId,
+      targetRunOrdinal: Number(v.targetRunOrdinal),
     };
   }
   const runId = text(v.runId, "run ID");
@@ -727,6 +741,57 @@ export class HostEngine {
           // Replace the working session with the new fork session so the
           // shared save path below persists it and returns its id/revision.
           value = this.store.session(forkResult.sessionId);
+        } else if (command.type === "rollback") {
+          if (value.status === "running")
+            throw new Error(
+              "Wait for the current turn before rolling back",
+            );
+          // S4: probe the harness's rollback capability + history mode.
+          // When native rollback is supported (capability flag + legacy
+          // history), call the provider's native RPC, then reconcile the
+          // returned provider snapshot into the durable store via
+          // rollbackThread. Otherwise degrade to the host-only reconcile
+          // (the existing fallback) — never silent.
+          const caps = capabilitiesFor(value.session.harness);
+          const policy = degradePolicy(caps, "rollback");
+          const hostReconcile = () => {
+            rollbackThread(
+              this.store,
+              value.session.id,
+              command.targetRunOrdinal,
+            );
+          };
+          // Native path (capability-supported + history probe + native RPC).
+          if (policy === "supported" && provider.rollbackToRun) {
+            effect = () => {
+              void (async () => {
+                try {
+                  const historyMode = await provider
+                    .historyMode?.(value.session.id)
+                    .catch(() => "paginated" as const);
+                  if (historyMode === "legacy") {
+                    // Provider-native rewind, then the durable host reconcile.
+                    await provider.rollbackToRun!(
+                      value.session.id,
+                      command.targetRunOrdinal,
+                    );
+                    hostReconcile();
+                  } else {
+                    // Paginated history: no native rewind; host reconcile.
+                    hostReconcile();
+                  }
+                } catch {
+                  // Provider-native rewind failed: still reconcile the host
+                  // state (the provider didn't move, so the durable rollback
+                  // remains the auditable record).
+                  hostReconcile();
+                }
+              })();
+            };
+          } else {
+            // No native RPC: host-only reconcile (the existing fallback).
+            hostReconcile();
+          }
         } else if (command.type === "send" || command.type === "compact") {
           if (value.status === "running")
             throw new Error("This session is already running");

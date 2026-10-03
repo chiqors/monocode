@@ -36,6 +36,16 @@ import { respondQuestion as respondPiQuestion } from "../src/integrations/harnes
 export interface HostProvider {
   send(input: SendTurnInput): Promise<void>;
   compact?(input: CompactContextInput): Promise<void>;
+  /**
+   * Provider-native rollback (rewind) to a specific app run ordinal. The
+   * harness performs the native rewind (e.g. OpenCode revertSession, codex
+   * thread/revert) and the app reconciles the returned provider snapshot.
+   * When absent or when history mode is not supported, degrade via the
+   * capability policy (host-only rollbackThread still runs).
+   */
+  rollbackToRun?(sessionId: string, targetRunOrdinal: number): Promise<void>;
+  /** Provider history mode probe: legacy (native revert ok) vs paginated. */
+  historyMode?(sessionId: string): Promise<"legacy" | "paginated">;
   /** Provider-native conversation fork RPC (OpenCode POST /session/:id/fork). */
   forkSession?(
     sessionId: string,
@@ -100,6 +110,9 @@ export const hostProviders: Record<RemoteProvider, HostProvider> = {
   opencode: {
     send: opencode.sendOpenCodeTurn,
     compact: opencode.compactOpenCodeContext,
+    rollbackToRun: (sessionId, targetRunOrdinal) =>
+      opencode.rollbackOpenCodeToRun(sessionId, targetRunOrdinal),
+    historyMode: () => opencode.openCodeHistoryMode(),
     forkSession: (sessionId, forkThreadId, forkCwd) =>
       opencode.forkOpenCodeSession(
         forkThreadId,
