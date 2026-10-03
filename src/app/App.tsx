@@ -9396,8 +9396,19 @@ function Workspace({
                   "Delegate_task is unavailable for local sessions yet (local delegation needs the in-process orchestrator path).",
                 );
               return remoteRequest<{
+                taskId: string;
                 workerSessionId: string;
-                result: string;
+                childThreadId: string;
+                childRunId: string | null;
+                childNodeId: string | null;
+                status: string;
+                workState: string;
+                summary: string | null;
+                resultContextTransferId: string | null;
+                latestTerminalRunId: string | null;
+                latestTerminalStatus: string | null;
+                latestTerminalSummary: string | null;
+                waitTimedOut: boolean;
                 policy: "native" | "synthetic";
               }>(machine.id, "delegate.task", {
                 leadSessionId: source.id,
@@ -9405,7 +9416,40 @@ function Workspace({
                 model: input.model,
                 task: input.task,
                 runtimeMode: input.runtimeMode,
+                ...(input.mode ? { mode: input.mode } : {}),
+                ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
               });
+            },
+            taskStatus: async (taskId) => {
+              const environment = remoteProjectFor(source.cwd)?.environmentId;
+              const machine = environment
+                ? await remoteMachineFor(environment)
+                : undefined;
+              if (!machine)
+                throw new Error("Task status is unavailable for local sessions yet.");
+              return remoteRequest<{
+                taskId: string;
+                childThreadId: string;
+                childRunId: string | null;
+                childNodeId: string | null;
+                status: string;
+                workState: string;
+                summary: string | null;
+                latestTerminalStatus: string | null;
+                waitTimedOut: boolean;
+              }>(machine.id, "task.status", { taskId });
+            },
+            taskCancel: async (taskId) => {
+              const environment = remoteProjectFor(source.cwd)?.environmentId;
+              const machine = environment
+                ? await remoteMachineFor(environment)
+                : undefined;
+              if (!machine)
+                throw new Error("Task cancel is unavailable for local sessions yet.");
+              return remoteRequest<{
+                taskId: string;
+                cancelled: boolean;
+              }>(machine.id, "task.cancel", { taskId });
             },
             worktrees: (cwd) => listWorktrees(cwd),
             createWorktree: (cwd, branch, base, existing) =>

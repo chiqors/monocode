@@ -98,6 +98,26 @@ export class HostStore {
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS idx_checkpoint_scopes_session ON checkpoint_scopes(session_id)",
     );
+    this.db.exec(`CREATE TABLE IF NOT EXISTS delegated_tasks (
+      task_id TEXT PRIMARY KEY,
+      lead_session_id TEXT NOT NULL REFERENCES sessions(id),
+      child_session_id TEXT NOT NULL REFERENCES sessions(id),
+      child_run_id TEXT,
+      child_node_id TEXT,
+      status TEXT NOT NULL,
+      work_state TEXT NOT NULL,
+      summary TEXT,
+      latest_terminal_run_id TEXT,
+      latest_terminal_status TEXT,
+      result_context_transfer_id TEXT,
+      mode TEXT NOT NULL,
+      timeout_ms INTEGER,
+      wait_timed_out INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );`);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_delegated_tasks_lead ON delegated_tasks(lead_session_id)",
+    );
     this.db.exec(`CREATE TABLE IF NOT EXISTS execution_nodes (
       id TEXT NOT NULL,
       session_id TEXT NOT NULL REFERENCES sessions(id),

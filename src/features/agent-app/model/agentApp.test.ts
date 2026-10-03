@@ -95,10 +95,33 @@ function fixture() {
     send: vi.fn(async () => ({ alreadySubmitted: false })),
     draft: vi.fn(async () => ({ alreadySaved: false, draft: true })),
     delegateTask: vi.fn(async () => ({
+      taskId: "task:1",
       workerSessionId: "worker-1",
-      result: "done",
+      childThreadId: "worker-1",
+      childRunId: "run-1",
+      childNodeId: "subagent:worker-1",
+      status: "completed",
+      workState: "result_available",
+      summary: "done",
+      resultContextTransferId: "handoff-1",
+      latestTerminalRunId: "run-1",
+      latestTerminalStatus: "completed",
+      latestTerminalSummary: "done",
+      waitTimedOut: false,
       policy: "native" as const,
     })),
+    taskStatus: vi.fn(async (taskId) => ({
+      taskId,
+      childThreadId: "worker-1",
+      childRunId: "run-1",
+      childNodeId: "subagent:worker-1",
+      status: "completed",
+      workState: "result_available",
+      summary: "done",
+      latestTerminalStatus: "completed",
+      waitTimedOut: false,
+    })),
+    taskCancel: vi.fn(async (taskId) => ({ taskId, cancelled: true })),
     worktrees: vi.fn(async () => ({
       worktrees: [
         { ...featureWorktree },
@@ -136,6 +159,60 @@ describe("agent app commands", () => {
       runtimeMode: "supervised",
     });
     expect(result).toMatchObject({ workerSessionId: "worker-1" });
+  });
+
+  it("forwards mode/timeoutMs and returns the structured subagent_result", async () => {
+    const { source, host } = fixture();
+    const result = await handleAgentApp(
+      source,
+      "req-1b",
+      "delegate_task",
+      {
+        provider: "claude",
+        model: "claude:test",
+        task: "fix the bug",
+        runtimeMode: "supervised",
+        mode: "async",
+        timeoutMs: 5000,
+      },
+      host,
+    );
+    expect(host.delegateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "async", timeoutMs: 5000 }),
+    );
+    // The structured result is surfaced (taskId, workState, latestTerminal*).
+    expect(result).toMatchObject({
+      taskId: "task:1",
+      workState: "result_available",
+      latestTerminalStatus: "completed",
+      policy: "native",
+    });
+  });
+
+  it("routes task_status to the host taskStatus reader", async () => {
+    const { source, host } = fixture();
+    const result = await handleAgentApp(
+      source,
+      "req-3",
+      "task_status",
+      { taskId: "task:1" },
+      host,
+    );
+    expect(host.taskStatus).toHaveBeenCalledWith("task:1");
+    expect(result).toMatchObject({ taskId: "task:1", status: "completed" });
+  });
+
+  it("routes task_cancel to the host taskCancel (idempotent)", async () => {
+    const { source, host } = fixture();
+    const result = await handleAgentApp(
+      source,
+      "req-4",
+      "task_cancel",
+      { taskId: "task:1" },
+      host,
+    );
+    expect(host.taskCancel).toHaveBeenCalledWith("task:1");
+    expect(result).toMatchObject({ taskId: "task:1", cancelled: true });
   });
 
   it("rejects unknown provider on delegate_task", async () => {

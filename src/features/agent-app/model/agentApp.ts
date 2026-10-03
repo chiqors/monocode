@@ -71,7 +71,38 @@ export type AgentAppHost = {
     model: string;
     task: string;
     runtimeMode: "supervised" | "auto" | "monitored" | "unrestricted";
-  }): Promise<{ workerSessionId: string; result: string; policy: "native" | "synthetic" }>;
+    mode?: "async" | "wait";
+    timeoutMs?: number;
+  }): Promise<{
+    taskId: string;
+    workerSessionId: string;
+    childThreadId: string;
+    childRunId: string | null;
+    childNodeId: string | null;
+    status: string;
+    workState: string;
+    summary: string | null;
+    resultContextTransferId: string | null;
+    latestTerminalRunId: string | null;
+    latestTerminalStatus: string | null;
+    latestTerminalSummary: string | null;
+    waitTimedOut: boolean;
+    policy: "native" | "synthetic";
+  }>;
+  /** G5: read a delegated task's durable state. */
+  taskStatus(taskId: string): Promise<{
+    taskId: string;
+    childThreadId: string;
+    childRunId: string | null;
+    childNodeId: string | null;
+    status: string;
+    workState: string;
+    summary: string | null;
+    latestTerminalStatus: string | null;
+    waitTimedOut: boolean;
+  }>;
+  /** G5: cancel a delegated task (idempotent). */
+  taskCancel(taskId: string): Promise<{ taskId: string; cancelled: boolean }>;
   worktrees(cwd: string): Promise<Worktrees>;
   createWorktree(
     cwd: string,
@@ -92,8 +123,10 @@ const FIELDS = new Map<string, readonly string[]>([
   ["sessions.draft", ["sessionId", "prompt"]],
   [
     "delegate_task",
-    ["provider", "model", "task", "runtimeMode"],
+    ["provider", "model", "task", "runtimeMode", "mode", "timeoutMs"],
   ],
+  ["task_status", ["taskId"]],
+  ["task_cancel", ["taskId"]],
   [
     "sessions.start",
     [
@@ -377,8 +410,30 @@ export async function handleAgentApp(
         model: requiredString(input.model, "model", 200),
         task: agentPrompt(input.task),
         runtimeMode: (input.runtimeMode as "supervised" | "auto" | "monitored" | "unrestricted") ?? "supervised",
+        ...(input.mode === "async" || input.mode === "wait"
+          ? { mode: input.mode }
+          : {}),
+        ...(typeof input.timeoutMs === "number" &&
+        Number.isSafeInteger(input.timeoutMs) &&
+        input.timeoutMs > 0
+          ? { timeoutMs: input.timeoutMs }
+          : {}),
       });
       return output;
+    }
+    case "task_status": {
+      // G5: read a delegated task's durable state (recoverable, trackable).
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestId))
+        throw new Error("Invalid request ID");
+      const taskId = requiredString(input.taskId, "taskId", 200);
+      return await host.taskStatus(taskId);
+    }
+    case "task_cancel": {
+      // G5: cancel a delegated task (idempotent for terminal tasks).
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestId))
+        throw new Error("Invalid request ID");
+      const taskId = requiredString(input.taskId, "taskId", 200);
+      return await host.taskCancel(taskId);
     }
     case "sessions.start": {
       if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestId))

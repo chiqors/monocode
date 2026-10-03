@@ -86,7 +86,9 @@ describe("delegate_task (app-owned, capability-gated)", () => {
     expect(result.workerSessionId).toBeTruthy();
     expect(result.workerSessionId).not.toBe(lead.sessionId);
     // The worker's result integrated back (the Handoff artifact carries it).
-    expect(result.result).toContain("worker result");
+    expect(result.summary).toContain("worker result");
+    expect(result.workState).toBe("result_available");
+    expect(result.latestTerminalStatus).toBe("completed");
 
     // One graph: the lead run has a child subagent node for the worker.
     const leadRuns = store.runs(lead.sessionId);
