@@ -14,6 +14,7 @@ import { replayProvider, type ProviderTranscript } from "./replay";
 import {
   bindProviderRef,
   findProviderRef,
+  pickCorrelationStrategy,
   type ProviderBinding,
   type CorrelationStrategy,
 } from "./correlation";
@@ -125,6 +126,89 @@ describe("correlation module (app ids primary, provider refs as evidence)", () =
         .get("s1") as { count: number }
     ).count;
     expect(rows).toBe(1);
+  });
+
+  it("records nativeKind + scope on a binding (scoped correlation keys)", () => {
+    const directory = setupDir();
+    const store = new HostStore(join(directory, "correlation-scoped.db"));
+    cleanups.push(() => store.close());
+
+    bindProviderRef(store, {
+      appEntityKind: "session",
+      appEntityId: "app-1",
+      provider: "codex",
+      nativeRef: "conversation-42",
+      nativeKind: "conversation",
+      scope: "project:/repo",
+      correlation: "native_scoped",
+    });
+
+    const found = findProviderRef(store, {
+      appEntityKind: "session",
+      appEntityId: "app-1",
+      provider: "codex",
+    });
+    expect(found?.nativeKind).toBe("conversation");
+    expect(found?.scope).toBe("project:/repo");
+    expect(found?.correlation).toBe("native_scoped");
+  });
+
+  it("picks the correlation strategy by identity tier (strong/weak/none)", () => {
+    // Strong identity -> native exact.
+    expect(pickCorrelationStrategy("strong")).toBe("native_exact");
+    // Weak identity -> native scoped (or ordinal fallback).
+    expect(pickCorrelationStrategy("weak")).toBe("native_scoped");
+    // No identity -> fingerprint-only.
+    expect(pickCorrelationStrategy("none")).toBe("fingerprint");
+  });
+
+  it("resolves native exact, scoped, ordinal, and fingerprint bindings (replay-stable)", () => {
+    const directory = setupDir();
+    const store = new HostStore(join(directory, "correlation-tiers.db"));
+    cleanups.push(() => store.close());
+
+    const cases: Array<{
+      provider: string;
+      nativeRef: string;
+      strategy: CorrelationStrategy;
+      expected: CorrelationStrategy;
+    }> = [
+      { provider: "codex", nativeRef: "conv-1", strategy: "native_exact", expected: "native_exact" },
+      { provider: "cursor", nativeRef: "scope:conv-2", strategy: "native_scoped", expected: "native_scoped" },
+      { provider: "pi", nativeRef: "3", strategy: "ordinal", expected: "ordinal" },
+      { provider: "omp", nativeRef: "fp-abc123", strategy: "fingerprint", expected: "fingerprint" },
+    ];
+    for (const c of cases) {
+      bindProviderRef(store, {
+        appEntityKind: "session",
+        appEntityId: `app-${c.provider}`,
+        provider: c.provider as never,
+        nativeRef: c.nativeRef,
+        correlation: c.strategy,
+      });
+    }
+    for (const c of cases) {
+      const found = findProviderRef(store, {
+        appEntityKind: "session",
+        appEntityId: `app-${c.provider}`,
+        provider: c.provider as never,
+      });
+      expect(found?.correlation).toBe(c.expected);
+      // Replay-stable: resolving again gives the same strategy, no duplicate.
+      const again = findProviderRef(store, {
+        appEntityKind: "session",
+        appEntityId: `app-${c.provider}`,
+        provider: c.provider as never,
+      });
+      expect(again?.nativeRef).toBe(found?.nativeRef);
+    }
+    expect(
+      (
+        store.db.prepare("SELECT COUNT(*) AS count FROM provider_bindings").get() as {
+          count: number;
+        }
+      ).count,
+    ).toBe(4);
   });
 });
 

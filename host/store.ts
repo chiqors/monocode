@@ -52,6 +52,8 @@ export class HostStore {
       provider TEXT NOT NULL,
       native_ref TEXT NOT NULL,
       correlation TEXT NOT NULL,
+      native_kind TEXT,
+      scope TEXT,
       created_at INTEGER NOT NULL,
       PRIMARY KEY (app_entity_kind, app_entity_id, provider)
     );`);

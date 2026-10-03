@@ -1,10 +1,18 @@
-// T6 (issue #7): capability system + degradation policy.
+// T6 (issue #7) + G6 (issue #18): capability system + degradation policy.
 //
 // Each harness declares explicit capability flags; orchestration code never
 // branches on harness NAME — every decision goes through capability/policy.
 // When a capability is missing, a typed degradation policy tells the caller
 // how to fall back (interrupt-and-restart, synthetic fork, synthetic user
 // message, etc.) instead of failing opaquely.
+//
+// G6 adds the versioned, tiered shape: each adapter report carries a version,
+// an `identity` tier (strong | weak | none — how reliable its native ids are
+// for correlation), and a `terminalStatusQuality` tier (terminal | estimated |
+// unknown — how reliably it reports run completion). The boolean capability
+// flags are retained and keep driving the existing degradation policy; the
+// tiers only ADD the richer shape so consumers can stop overclaiming on weak
+// providers (e.g. terminal-quality optimizations, correlation strategy).
 import type { HarnessId } from "../src/features/sessions/model/session";
 
 export type DegradationPolicy =
@@ -13,6 +21,12 @@ export type DegradationPolicy =
   | "synthetic_fork"
   | "synthetic_user_message"
   | "unavailable";
+
+/** How reliably a provider's native ids can be correlated to app entities. */
+export type IdentityTier = "strong" | "weak" | "none";
+
+/** How reliably a provider reports terminal run status. */
+export type TerminalStatusQuality = "terminal" | "estimated" | "unknown";
 
 /** The capability flags a harness may declare. */
 export type CapabilityFlags = {
@@ -28,8 +42,15 @@ export type CapabilityFlags = {
   rollback: boolean;
   /** A handoff summary can be injected / accepted. */
   handoff: boolean;
-  /** The provider emits stable native ids for correlation. */
-  identity: boolean;
+  /**
+   * G6: how reliable the provider's native ids are for correlation
+   * (replaces the old optimistic boolean; no consumer reads it as a boolean).
+   */
+  identity: IdentityTier;
+  /** G6: adapter report version (increments on shape change). */
+  version: number;
+  /** G6: how reliably the provider reports terminal run status. */
+  terminalStatusQuality: TerminalStatusQuality;
 };
 
 export const CAPABILITY_KEYS = [
@@ -50,7 +71,9 @@ export const DEFAULT_CAPABILITIES: CapabilityFlags = {
   fork: true,
   rollback: true,
   handoff: true,
-  identity: true,
+  identity: "strong",
+  version: 1,
+  terminalStatusQuality: "terminal",
 };
 
 const name = "DEFAULTS";
@@ -84,6 +107,21 @@ export function degradePolicy(
   caps: CapabilityFlags,
   action: keyof CapabilityFlags,
 ): DegradationPolicy {
+  // G6: tiered capabilities are only "supported" at their strongest tier.
+  // `identity` is a tier (strong|weak|none): only strong identity is fully
+  // supported (native_exact correlation); weak/none degrade to synthetic
+  // correlation. `terminalStatusQuality` is a tier (terminal|estimated|
+  // unknown): only terminal quality is supported; estimated/unknown mean the
+  // provider cannot be trusted to drive terminal-only optimizations.
+  if (action === "identity") {
+    return caps.identity === "strong" ? "supported" : "synthetic_user_message";
+  }
+  if (action === "terminalStatusQuality") {
+    return caps.terminalStatusQuality === "terminal"
+      ? "supported"
+      : "interrupt_and_restart";
+  }
+  if (action === "version") return "supported";
   if (caps[action]) return "supported";
   switch (action) {
     case "steer":

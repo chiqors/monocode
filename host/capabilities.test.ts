@@ -94,6 +94,44 @@ describe("capability system (flags, not names)", () => {
     const policy = degradePolicy(capabilitiesFor("codex"), "fork");
     expect(policy).toBe("supported");
   });
+
+  it("reports versioned, tiered capabilities per adapter", () => {
+    const caps = capabilitiesFor("codex");
+    // G6: the report is versioned and tiered, alongside the boolean flags.
+    expect(caps.version).toBe(1);
+    // Strong providers (stable native ids) declare strong identity.
+    expect(caps.identity).toBe("strong");
+    // Codex emits a terminal lifecycle event, so quality is 'terminal'.
+    expect(caps.terminalStatusQuality).toBe("terminal");
+  });
+
+  it("lets a weak provider declare weak identity + estimated terminal quality", () => {
+    const overrides: Partial<CapabilityFlags> = {
+      identity: "weak",
+      terminalStatusQuality: "estimated",
+    };
+    const caps = capabilitiesFor("pi", overrides);
+    expect(caps.identity).toBe("weak");
+    expect(caps.terminalStatusQuality).toBe("estimated");
+    // The boolean capability flags still work (existing consumers untouched).
+    expect(caps.steer).toBe(true);
+  });
+
+  it("degrades terminal-quality optimizations when quality is unknown", () => {
+    const caps: CapabilityFlags = {
+      ...capabilitiesFor("codex"),
+      terminalStatusQuality: "unknown",
+      identity: "none",
+    };
+    // G6: a provider that cannot report a terminal status must not drive
+    // root-only run completion optimizations (it falls back conservatively).
+    const policy = degradePolicy(caps, "terminalStatusQuality");
+    // 'unknown' quality -> the terminalStatusQuality capability is absent, so
+    // degrade to the conservative fallback for run completion.
+    expect(policy).not.toBe("supported");
+    // Identity 'none' -> correlation must fall back to fingerprint/ordinal.
+    expect(caps.identity).toBe("none");
+  });
 });
 
 describe("capability-driven behavior through the engine (no name branching)", () => {

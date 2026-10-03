@@ -36,7 +36,7 @@ import {
   normalizeRunEvent,
   type RunLifecycle,
 } from "./run-normalizer";
-import { bindProviderRef } from "./correlation";
+import { bindProviderRef, pickCorrelationStrategy } from "./correlation";
 import {
   applyNodeEvent,
   freshRootNode,
@@ -1138,12 +1138,21 @@ export class HostEngine {
     // its native conversation id, record it as a durable correlation binding
     // scoped to the app session id — never as primary identity.
     if (event.type === "session.providerBound") {
+      // G6: the correlation strategy follows the provider's identity tier
+      // (strong → native_exact, weak → native_scoped, none → fingerprint).
+      // Strong providers keep the native ref as-is; weak/none providers get a
+      // scoped/fingerprint key so correlation still works when native ids are
+      // unreliable without overclaiming.
+      const identity = capabilitiesFor(session.harness).identity;
+      const strategy = pickCorrelationStrategy(identity);
       bindProviderRef(this.store, {
         appEntityKind: "session",
         appEntityId: id,
         provider: session.harness,
         nativeRef: event.providerSessionId,
-        correlation: "native_exact",
+        correlation: strategy,
+        nativeKind: "conversation",
+        scope: identity === "strong" ? undefined : `provider:${session.harness}`,
       });
       // G1a: the durable ProviderThread records the resume cursor (the
       // provider-native thread ref) as evidence, plus the coverage of the runs
