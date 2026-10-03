@@ -14,6 +14,7 @@ import { HostEngine } from "./engine";
 import { HostStore } from "./store";
 import { replayProvider, type ProviderTranscript } from "./replay";
 import { forkThread, mergeBack } from "./fork-merge";
+import { pendingForkTransfer } from "./context-transfer";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -85,8 +86,14 @@ describe("forks + merge-back through the handoff primitives", () => {
         sourceSession.session.blocks.some((b) => b.id === block.id),
       ),
     ).toBe(true);
-    // A Handoff summary is recorded on the fork (the delta is reviewable).
-    expect(fork.handoffSummary.length).toBeGreaterThan(0);
+    // G2: the fork is lazy — no Handoff row at fork time, only a pending
+    // ContextTransfer (resolved on the fork's first dispatch).
+    expect(pendingForkTransfer(store, fork.sessionId)).toBeTruthy();
+    const handoffs = store.db
+      .prepare("SELECT * FROM handoffs WHERE session_id=?")
+      .all(fork.sessionId);
+    expect(handoffs).toHaveLength(0);
+    expect(fork.transferId).toBeTruthy();
   });
 
   it("merge-back applies the fork's new blocks to the source thread", async () => {

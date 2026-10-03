@@ -68,6 +68,19 @@ export class HostStore {
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS idx_provider_threads_session ON provider_threads(session_id)",
     );
+    this.db.exec(`CREATE TABLE IF NOT EXISTS context_transfers (
+      id TEXT PRIMARY KEY,
+      source_session_id TEXT NOT NULL REFERENCES sessions(id),
+      fork_session_id TEXT NOT NULL REFERENCES sessions(id),
+      type TEXT NOT NULL,
+      state TEXT NOT NULL,
+      payload TEXT,
+      created_at INTEGER NOT NULL,
+      UNIQUE (fork_session_id, type)
+    );`);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_context_transfers_fork ON context_transfers(fork_session_id)",
+    );
     this.db.exec(`CREATE TABLE IF NOT EXISTS execution_nodes (
       id TEXT NOT NULL,
       session_id TEXT NOT NULL REFERENCES sessions(id),

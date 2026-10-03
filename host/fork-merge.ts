@@ -1,19 +1,28 @@
-// F3 (issue #11): forks + merge-back through the Handoff primitives.
+// F3 (issue #11) + G2 (issue #17): forks + merge-back through the Handoff
+// primitives, with lazy resolution.
 //
 // A thread can be forked into a new app session sharing the source's runs up
-// to the fork point; merge-back applies the fork's new blocks into the source
-// via the Handoff artifact. Harnesses without native fork degrade through the
-// capability policy (synthetic fork from the app projection).
+// to the fork point. G2 makes forking CHEAP: forkThread creates the target
+// App thread + a pending ContextTransfer (type `fork`) WITHOUT any provider
+// work or eager Handoff. The fork's FIRST dispatch resolves the transfer
+// (native fork when possible, else portable context / Handoff summary).
+// Forks are only made from STABLE source points (a terminal fork-at run, or
+// an idle thread); forking from an active run is rejected.
 import { randomUUID } from "node:crypto";
 import type { HostStore } from "./store";
 import { buildRunHandoffSummary, recordHandoff } from "./handoff-summary";
+import {
+  createForkTransfer,
+  pendingForkTransfer,
+  resolveForkTransfer,
+} from "./context-transfer";
 
 export type ForkResult = {
   sessionId: string;
   /** The source session id (shared runs up to the fork point). */
   runs: string[];
-  /** The recorded Handoff summary (the delta), reviewable in the transcript. */
-  handoffSummary: string;
+  /** The durable pending ContextTransfer id (resolved on first dispatch). */
+  transferId: string;
 };
 
 export type MergeBackResult = {
@@ -23,10 +32,21 @@ export type MergeBackResult = {
   count: number;
 };
 
+/** Terminal RunStatus values that make a fork-at point a stable source point. */
+const STABLE_FORK_STATUSES = new Set(["completed", "interrupted", "failed", "cancelled"]);
+
 /**
- * Fork a thread at a run ordinal. Creates a new app session borrowing the
- * source's blocks up to the fork point, references the source's runs (one
- * model — history is shared), and records a Handoff summary (the delta).
+ * Fork a thread at a run ordinal, lazily.
+ *
+ * Stabilization: forking is rejected unless the source is at a STABLE point —
+ * the fork-at run is terminal, or the source thread is idle with no run in
+ * flight. This guarantees a fork only ever starts from a state that can be
+ * faithfully reproduced (no active provider work is being forked around).
+ *
+ * The fork creates the target App thread (borrowing the source's blocks up to
+ * the fork point) + a pending ContextTransfer. NO Handoff row is recorded and
+ * NO provider session/thread/context is touched until the fork's first
+ * dispatch (see resolveForkOnFirstDispatch).
  */
 export function forkThread(
   store: HostStore,
@@ -36,6 +56,20 @@ export function forkThread(
   const source = store.session(sourceSessionId);
   const runs = store.runs(sourceSessionId);
   const forkAtRun = runs.find((r) => r.ordinal === forkRunOrdinal);
+  // Stable source point policy (G2): the fork-at run must be terminal, or the
+  // thread must be idle with no in-flight run. A running/queued run is an
+  // unstable point — forking around active work cannot be faithfully
+  // reproduced, so reject it. (Checkpoint source points arrive with G3.)
+  if (forkAtRun && !STABLE_FORK_STATUSES.has(forkAtRun.status)) {
+    throw new Error(
+      `Fork requires a stable source point: run ${forkRunOrdinal} is ${forkAtRun.status}`,
+    );
+  }
+  if (!forkAtRun && runs.some((run) => !STABLE_FORK_STATUSES.has(run.status))) {
+    throw new Error(
+      "Fork requires a stable source point: the thread has an in-flight run",
+    );
+  }
   // The fork point block: the last block of the run at forkRunOrdinal's *user
   // message* + its assistant reply. Simplest honest rule: copy all blocks up
   // to (and including) the assistant block of the fork run.
@@ -81,20 +115,50 @@ export function forkThread(
       JSON.stringify({ id: forkId }),
     );
 
-  const handoffSummary = buildRunHandoffSummary(store, sourceSessionId);
-  recordHandoff(store, {
-    sessionId: forkId,
-    provider: source.session.harness,
-    runOrdinal: forkAtRun?.ordinal ?? 1,
-    summary: handoffSummary,
-    handler: "fork",
+  // G2: lazy fork — no eager Handoff. Record the pending ContextTransfer so
+  // the fork's first dispatch can resolve it (portable context / native fork).
+  const transferId = createForkTransfer(store, {
+    sourceSessionId,
+    forkSessionId: forkId,
   });
 
   return {
     sessionId: forkId,
     runs: [sourceSessionId],
-    handoffSummary,
+    transferId,
   };
+}
+
+/**
+ * Resolve a fork's pending ContextTransfer on its first dispatch.
+ *
+ * The fork's first send materializes the portable context NOW: a Handoff
+ * summary (the delta, derived from the run store) is built, recorded as a
+ * durable reviewable handoff row, and the transfer is marked resolved. Native
+ * fork (via a provider RPC) is the preferred path when available; the
+ * portable-context Handoff is the fallback, exactly per t3code V2
+ * ("materialize portable context"). Idempotent: calling it twice resolves
+ * only the single pending transfer.
+ *
+ * Returns the Handoff summary text (empty if the fork is not pending or
+ * already resolved).
+ */
+export function resolveForkOnFirstDispatch(
+  store: HostStore,
+  forkSessionId: string,
+): string {
+  const pending = pendingForkTransfer(store, forkSessionId);
+  if (!pending) return "";
+  const summary = buildRunHandoffSummary(store, pending.sourceSessionId);
+  recordHandoff(store, {
+    sessionId: forkSessionId,
+    provider: store.session(forkSessionId).session.harness,
+    runOrdinal: 1,
+    summary,
+    handler: "fork",
+  });
+  resolveForkTransfer(store, forkSessionId, { summary });
+  return summary;
 }
 
 /**

@@ -41,6 +41,7 @@ import {
   applyNodeEvent,
   freshRootNode,
 } from "./execution-node";
+import { resolveForkOnFirstDispatch } from "./fork-merge";
 import {
   buildRunHandoffSummary,
   recordHandoff,
@@ -733,6 +734,15 @@ export class HostEngine {
           const firstTurn =
             command.type === "send" &&
             !value.session.blocks.some((block) => !block.draft);
+          // G2: the fork's first dispatch resolves its pending ContextTransfer
+          // (lazy fork). Nothing provider-side happened at fork time; now the
+          // portable context (a reviewable Handoff summary) is materialized
+          // and the transfer is marked resolved exactly once.
+          // The fork's first dispatch is its first real `send` (the fork has
+          // copied source blocks, so the block-based `firstTurn` is false —
+          // the pending transfer is the true marker of "first dispatch").
+          if (command.type === "send")
+            resolveForkOnFirstDispatch(this.store, value.session.id);
           const placeholderTitle =
             value.session.title === "New remote session" ||
             canReplaceSessionTitle(
