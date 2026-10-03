@@ -94,6 +94,11 @@ function fixture() {
     ),
     send: vi.fn(async () => ({ alreadySubmitted: false })),
     draft: vi.fn(async () => ({ alreadySaved: false, draft: true })),
+    delegateTask: vi.fn(async () => ({
+      workerSessionId: "worker-1",
+      result: "done",
+      policy: "native" as const,
+    })),
     worktrees: vi.fn(async () => ({
       worktrees: [
         { ...featureWorktree },
@@ -110,6 +115,47 @@ function fixture() {
 }
 
 describe("agent app commands", () => {
+  it("routes the delegate_task action to the app-owned host tool", async () => {
+    const { source, host } = fixture();
+    const result = await handleAgentApp(
+      source,
+      "req-1",
+      "delegate_task",
+      {
+        provider: "claude",
+        model: "claude:test",
+        task: "fix the bug",
+        runtimeMode: "supervised",
+      },
+      host,
+    );
+    expect(host.delegateTask).toHaveBeenCalledWith({
+      provider: "claude",
+      model: "claude:test",
+      task: "fix the bug",
+      runtimeMode: "supervised",
+    });
+    expect(result).toMatchObject({ workerSessionId: "worker-1" });
+  });
+
+  it("rejects unknown provider on delegate_task", async () => {
+    const { source, host } = fixture();
+    await expect(
+      handleAgentApp(
+        source,
+        "req-2",
+        "delegate_task",
+        {
+          provider: "not-a-harness",
+          model: "x",
+          task: "t",
+        },
+        host,
+      ),
+    ).rejects.toThrow("Unknown provider");
+    expect(host.delegateTask).not.toHaveBeenCalled();
+  });
+
   it("reads a listed project session in bounded pages", async () => {
     const { source, host } = fixture();
     const result = await handleAgentApp(

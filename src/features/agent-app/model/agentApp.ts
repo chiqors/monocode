@@ -65,6 +65,13 @@ export type AgentAppHost = {
     prompt: string,
     requestId: string,
   ): Promise<{ alreadySaved: boolean; draft: boolean }>;
+  /** The app-owned delegate_task tool: delegate to another provider/worker. */
+  delegateTask(input: {
+    provider: HarnessId;
+    model: string;
+    task: string;
+    runtimeMode: "supervised" | "auto" | "monitored" | "unrestricted";
+  }): Promise<{ workerSessionId: string; result: string; policy: "native" | "synthetic" }>;
   worktrees(cwd: string): Promise<Worktrees>;
   createWorktree(
     cwd: string,
@@ -83,6 +90,10 @@ const FIELDS = new Map<string, readonly string[]>([
   ["sessions.read", ["sessionId", "before", "limit", "maxChars"]],
   ["sessions.send", ["sessionId", "prompt"]],
   ["sessions.draft", ["sessionId", "prompt"]],
+  [
+    "delegate_task",
+    ["provider", "model", "task", "runtimeMode"],
+  ],
   [
     "sessions.start",
     [
@@ -352,6 +363,22 @@ export async function handleAgentApp(
         `app-${source.id}-${requestId}`,
       );
       return { sessionId: id, saved: true, ...result };
+    }
+    case "delegate_task": {
+      // App-owned cross-provider delegation: spawn a worker under the lead
+      // run's graph and integrate its result through the Handoff artifact.
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestId))
+        throw new Error("Invalid request ID");
+      const provider = requiredString(input.provider, "provider", 64);
+      if (!HARNESSES.includes(provider as HarnessId))
+        throw new Error("Unknown provider");
+      const output = await host.delegateTask({
+        provider: provider as HarnessId,
+        model: requiredString(input.model, "model", 200),
+        task: agentPrompt(input.task),
+        runtimeMode: (input.runtimeMode as "supervised" | "auto" | "monitored" | "unrestricted") ?? "supervised",
+      });
+      return output;
     }
     case "sessions.start": {
       if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestId))

@@ -406,6 +406,32 @@ export function createHostServer(
           case "commands.dispatch":
             result = engine.command(params);
             break;
+          case "delegate.task": {
+            const { delegateTask } = await import("./delegate-task");
+            const input = params as {
+              leadSessionId: string;
+              provider: string;
+              model: string;
+              task: string;
+              runtimeMode: "supervised" | "auto" | "monitored" | "unrestricted";
+            };
+            if (
+              typeof input.leadSessionId !== "string" ||
+              typeof input.provider !== "string" ||
+              typeof input.model !== "string" ||
+              typeof input.task !== "string" ||
+              !input.task.trim()
+            )
+              throw new Error("Invalid delegate_task input");
+            result = await delegateTask(engine.store, engine, {
+              leadSessionId: input.leadSessionId,
+              provider: input.provider as never,
+              model: input.model,
+              task: input.task,
+              runtimeMode: input.runtimeMode ?? "supervised",
+            });
+            break;
+          }
           case "attachments.upload":
             result = writeAttachmentChunk(engine.store, params);
             break;

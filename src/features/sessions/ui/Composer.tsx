@@ -244,6 +244,8 @@ type Props = {
   handoffCard?: HandoffComposerCard;
   question?: UserQuestionPrompt;
   busy?: boolean;
+  /** Capability-informed label for the Stop/Interrupt affordance. */
+  interruptLabel?: string;
   /** Allow typed text to replace Stop with Send while a turn is running. */
   allowBusySubmit?: boolean;
   editLastTurnSupported?: boolean;
@@ -567,6 +569,7 @@ export function Composer({
   canSaveDraft = false,
   onSaveDraft,
   onStop,
+  interruptLabel,
   onCompactContext,
   onPlaceInFolder,
   onDeleteQueuedMessage,
@@ -2643,6 +2646,7 @@ export function Composer({
                 hasValue={hasValue && !worktreeRemoved}
                 allowBusySubmit={allowBusySubmit}
                 label={draftActive ? "Save draft" : "Send"}
+                interruptLabel={interruptLabel}
                 onSend={() => submit(ref.current?.value ?? "")}
                 onStop={() => onStop?.()}
               />
@@ -2658,6 +2662,7 @@ export function Composer({
             onExited={() => setRunnerLive(false)}
           />
         ) : null}
+              interruptLabel?: string;
       </div>
     </div>
   );
@@ -2777,6 +2782,7 @@ export function ComposerAction({
   hasValue,
   allowBusySubmit = true,
   label = "Send",
+  interruptLabel,
   onSend,
   onStop,
 }: {
@@ -2785,6 +2791,7 @@ export function ComposerAction({
   hasValue: boolean;
   allowBusySubmit?: boolean;
   label?: string;
+  interruptLabel?: string;
   onSend: () => void;
   onStop: () => void;
 }) {
@@ -2815,10 +2822,14 @@ export function ComposerAction({
     ) : (
       <button
         type="button"
-        title="Stop"
-        aria-label="Stop"
+        title={interruptLabel ?? "Stop"}
+        aria-label={interruptLabel ?? "Stop"}
         onClick={onStop}
-        className="grid size-6.5 place-items-center rounded-md bg-white text-black hover:bg-white/90"
+        className={`grid size-6.5 place-items-center rounded-md bg-white text-black hover:bg-white/90 ${
+          interruptLabel === "Interrupt (destructive)"
+            ? "ring-1 ring-red-400/80"
+            : ""
+        }`}
       >
         <Square className="size-2.5 fill-current" strokeWidth={0} />
       </button>

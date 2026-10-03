@@ -558,6 +558,8 @@ import {
   OPEN_REMOTE_PROJECT_EVENT,
   REMOTE_HISTORY_UPDATED,
   cachedRemoteSessionSummary,
+  remoteMachineFor,
+  remoteRequest,
   rememberRemotePendingWorktree,
   rememberRemoteSession,
   remotePendingWorktree,
@@ -9378,6 +9380,32 @@ function Workspace({
               );
               if (!saved) throw new Error("Session could not accept a draft");
               return { alreadySaved: false, draft: true };
+            },
+            delegateTask: async (input) => {
+              // App-owned delegate_task: the action surface is registered
+              // (agentApp.delegate_task). The host-side delegate.task command
+              // runs in the host service; route through the connected
+              // machine's remote_request bridge. Fail loudly if the machine
+              // is missing — never fabricate a worker.
+              const environment = remoteProjectFor(source.cwd)?.environmentId;
+              const machine = environment
+                ? await remoteMachineFor(environment)
+                : undefined;
+              if (!machine)
+                throw new Error(
+                  "Delegate_task is unavailable for local sessions yet (local delegation needs the in-process orchestrator path).",
+                );
+              return remoteRequest<{
+                workerSessionId: string;
+                result: string;
+                policy: "native" | "synthetic";
+              }>(machine.id, "delegate.task", {
+                leadSessionId: source.id,
+                provider: input.provider,
+                model: input.model,
+                task: input.task,
+                runtimeMode: input.runtimeMode,
+              });
             },
             worktrees: (cwd) => listWorktrees(cwd),
             createWorktree: (cwd, branch, base, existing) =>

@@ -56,6 +56,7 @@ import {
 } from "../model/transcriptJump";
 import { EmptySession } from "./EmptySession";
 import { useComposerDockMotion } from "./useComposerDockMotion";
+import { capabilityAffordancesForHarness } from "../model/capabilityAffordances";
 import { MOD } from "../../../platform/tauri/platform";
 import {
   acknowledgeQuoteRequest,
@@ -652,6 +653,11 @@ const LocalSessionPane = memo(function LocalSessionPane({
       }}
       onBtwCommand={btw.openWith}
       onStop={() => onStop(session.id)}
+      interruptLabel={{
+        available: undefined,
+        destructive: "Interrupt (destructive)",
+        unavailable: "Interrupt unavailable",
+      }[capabilityAffordancesForHarness(session.harness).interrupt]}
       onCompactContext={() => onCompactContext(session.id)}
       onPlaceInFolder={(target) => onPlaceSessionInFolder(session.id, target)}
       queuedMessages={session.queuedMessages}

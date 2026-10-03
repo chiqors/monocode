@@ -11,6 +11,7 @@ import { join } from "node:path";
 import {
   projectOrchestration,
   migrateOrchestrationGraph,
+  readOrchestrationFromGraph,
   type OrchestrationRunView,
 } from "./orchestration-graph";
 import { HostStore } from "./store";
@@ -125,5 +126,50 @@ describe("orchestration graph projection (one model)", () => {
     expect(stored[0]!.kind).toBe("root_turn");
     expect(stored[1]!.kind).toBe("subagent");
     expect(stored[1]!.parentId).toBe(stored[0]!.id);
+  });
+
+  it("contracted read: worker state comes from the graph nodes (source of truth)", () => {
+    const directory = setupDir();
+    const store = new HostStore(join(directory, "or2.db"));
+    const replay = replayProvider({
+      format: "monocode-replay-v1",
+      provider: "claude",
+      scenario: "orchestration-lead",
+      entries: [],
+    });
+    const engine = new HostEngine(store, { claude: replay });
+    const project = store.addProject(directory, "Test");
+    cleanups.push(async () => {
+      await engine.close();
+      store.close();
+    });
+    const created = engine.command({
+      type: "create",
+      commandId: "create",
+      projectId: project.id,
+      harness: "claude",
+      model: "claude:test",
+      runtimeMode: "supervised",
+    });
+
+    const run: OrchestrationRunView = {
+      leadId: created.sessionId,
+      runId: "run-1",
+      dispatches: [{ id: "d1", sessionId: "worker-1", taskId: "t1", state: "running" }],
+    };
+    const { nodes, link } = projectOrchestration(run);
+    for (const node of nodes) store.upsertNode(node);
+    // The node tree drives the worker's durable state (completed on the graph).
+    const finished = nodes.map((node) =>
+      node.kind === "subagent" ? { ...node, status: "completed" as const } : node,
+    );
+    for (const node of finished) store.upsertNode(node);
+
+    // Contraction: read the dispatch's state from the graph, not the dispatch.
+    const contracted = readOrchestrationFromGraph(store, created.sessionId, {
+      graph: link,
+      dispatches: run.dispatches,
+    });
+    expect(contracted).toEqual([{ dispatchId: "d1", status: "completed" }]);
   });
 });

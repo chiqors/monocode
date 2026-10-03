@@ -8,6 +8,7 @@
 // history readable.
 
 import type { ExecutionNode } from "./execution-node";
+import type { HostStore } from "./store";
 
 /** The graph linkage an orchestration run carries after migration. */
 export type OrchestrationGraphLink = {
@@ -103,4 +104,31 @@ export function migrateOrchestrationGraph(
     dispatches,
   });
   return { run: { ...run, graph: link } };
+}
+
+/**
+ * Contract (ADR-0001): read a worker dispatch's durable state from the
+ * execution graph (the node tree) instead of the parallel dispatch state.
+ * Returns the worker's graph node status when the graph link exists, else
+ * null (legacy run without a link falls back to its own dispatch state).
+ */
+export function readOrchestrationFromGraph(
+  store: HostStore,
+  leadSessionId: string,
+  run: { graph?: OrchestrationGraphLink; dispatches?: DispatchView[] },
+): { dispatchId: string; status: string }[] | null {
+  if (!run.graph) return null;
+  const nodes = store.nodesForRun(leadSessionId, run.graph.leadRunId);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const workers = run.dispatches ?? [];
+  const result: { dispatchId: string; status: string }[] = [];
+  for (const dispatch of workers) {
+    const nodeId = run.graph.workerNodeIds[dispatch.id];
+    const node = nodeId ? byId.get(nodeId) : undefined;
+    result.push({
+      dispatchId: dispatch.id,
+      status: node ? node.status : dispatch.state,
+    });
+  }
+  return result;
 }
