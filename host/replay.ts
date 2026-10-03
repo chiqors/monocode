@@ -116,15 +116,22 @@ export function replayProvider(
   transcript: ProviderTranscript,
 ): HostProvider & { calls: () => ProviderReplayEntry[] } {
   const calls: ProviderReplayEntry[] = [];
+  const sends = transcript.entries.filter((e) => e.kind === "send");
+  let cursor = 0;
   const provider: HostProvider & { calls: () => ProviderReplayEntry[] } = {
     send: async (input) => {
-      const entries = transcript.entries.filter((e) => e.kind === "send");
-      for (const entry of entries) {
-        calls.push({ ...entry });
-        await input.onEvent({ type: "session.started" });
-        await input.onEvent({ type: "turn.started", providerTurnId: "replayed" });
-        await input.onEvent({ type: "message.delta", text: entry.text });
-        await input.onEvent({ type: "message.completed" });
+      // Consume the next recorded send and replay only the events that follow
+      // it (up to the next recorded send). This keeps multi-turn transcripts
+      // faithful: each engine send replays exactly one recorded conversation.
+      const next = sends[cursor];
+      if (!next) return;
+      cursor += 1;
+      calls.push({ ...next });
+      const start = transcript.entries.indexOf(next) + 1;
+      for (let index = start; index < transcript.entries.length; index++) {
+        const entry = transcript.entries[index];
+        if (entry.kind === "send") break;
+        if (entry.kind === "event") await input.onEvent(entry.event);
       }
     },
     cancel: async (_id) => {

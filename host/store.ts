@@ -11,6 +11,7 @@ import type {
 } from "../src/features/connections/model/protocol";
 import type { LinkedWorkItem } from "../src/features/sessions/model/session";
 import { sessionNeedsInput } from "../src/features/sessions/model/session";
+import type { Run } from "./run-normalizer";
 
 const CACHED_SESSIONS = 32;
 
@@ -34,6 +35,16 @@ export class HostStore {
       CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, signature TEXT NOT NULL, receipt TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events (session_id TEXT NOT NULL REFERENCES sessions(id), revision INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(session_id, revision));
       CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, hash TEXT NOT NULL UNIQUE);`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS runs (
+      id TEXT NOT NULL,
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      ordinal INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      message TEXT,
+      PRIMARY KEY (session_id, id)
+    );`);
     const columns = this.db.prepare("PRAGMA table_info(sessions)").all();
     if (!columns.some((column) => column.name === "summary"))
       this.db.exec("ALTER TABLE sessions ADD COLUMN summary TEXT");
@@ -108,6 +119,38 @@ export class HostStore {
     const value = this.find(id);
     if (!value) throw new Error("Session not found on this machine");
     return value;
+  }
+
+  /** Upsert one durable Run for a session. */
+  upsertRun(sessionId: string, run: Run): void {
+    this.db
+      .prepare(
+        `INSERT INTO runs (id, session_id, ordinal, status, started_at, ended_at, message)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id, id) DO UPDATE SET
+           status=excluded.status,
+           started_at=excluded.started_at,
+           ended_at=excluded.ended_at,
+           message=excluded.message`,
+      )
+      .run(
+        run.id,
+        sessionId,
+        run.ordinal,
+        run.status,
+        run.startedAt,
+        run.endedAt,
+        run.message,
+      );
+  }
+
+  /** The durable, ordered Run list for a session (newest last). */
+  runs(sessionId: string): Run[] {
+    return this.db
+      .prepare(
+        "SELECT id, session_id AS sessionId, ordinal, status, started_at AS startedAt, ended_at AS endedAt, message FROM runs WHERE session_id=? ORDER BY ordinal ASC",
+      )
+      .all(sessionId) as unknown as Run[];
   }
 
   summaries(projectId: string): HostSessionSummary[] {
@@ -230,6 +273,7 @@ export class HostStore {
       if (current.status === "running")
         throw new Error("Stop this session before deleting it");
       this.db.prepare("DELETE FROM events WHERE session_id=?").run(id);
+      this.db.prepare("DELETE FROM runs WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM sessions WHERE id=?").run(id);
       this.cache.delete(id);
     });

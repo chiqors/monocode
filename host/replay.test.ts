@@ -73,6 +73,16 @@ describe("replay harness at the provider boundary", () => {
       scenario: "simple_turn",
       entries: [
         { kind: "send", sessionId: "s", text: "hello" },
+        {
+          kind: "event",
+          sessionId: "s",
+          event: { type: "message.delta", text: "hi" },
+        },
+        {
+          kind: "event",
+          sessionId: "s",
+          event: { type: "message.completed" },
+        },
       ],
     };
     expect(parseTranscript(JSON.parse(JSON.stringify(transcript)))).toEqual(transcript);
@@ -135,6 +145,16 @@ describe("replay harness at the provider boundary", () => {
       scenario: "simple_turn",
       entries: [
         { kind: "send", sessionId: "s", text: "hello" },
+        {
+          kind: "event",
+          sessionId: "s",
+          event: { type: "message.delta", text: "hi" },
+        },
+        {
+          kind: "event",
+          sessionId: "s",
+          event: { type: "message.completed" },
+        },
       ],
     };
     const store = new HostStore(join(directory, "dup.db"));

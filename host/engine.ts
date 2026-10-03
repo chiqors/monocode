@@ -31,6 +31,11 @@ import {
 } from "../src/features/connections/model/protocol";
 import type { HostProvider } from "./providers";
 import { HostStore } from "./store";
+import {
+  freshRunLifecycle,
+  normalizeRunEvent,
+  type RunLifecycle,
+} from "./run-normalizer";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -255,6 +260,7 @@ export class HostEngine {
     {
       value: HostSession;
       events: HarnessEvent[];
+      runLifecycle: RunLifecycle;
       timer?: ReturnType<typeof setTimeout>;
     }
   >();
@@ -622,6 +628,18 @@ export class HostEngine {
               ],
             },
           };
+          // The counted, durable Run entity: created in the same transaction
+          // as the send so the run row and the session stay consistent.
+          const startedAt = Date.now();
+          this.store.upsertRun(value.session.id, {
+            id: runId,
+            sessionId: value.session.id,
+            ordinal: this.store.runs(value.session.id).length + 1,
+            status: "running",
+            startedAt,
+            endedAt: null,
+            message: command.type === "compact" ? null : command.text,
+          });
           effect = (saved) => {
             this.run(
               saved,
@@ -785,7 +803,11 @@ export class HostEngine {
     const provider = this.provider(session.harness);
     const active = { runId: runId!, done: Promise.resolve(), cancelled: false, persistenceFailed: false };
     this.running.set(session.id, active);
-    this.live.set(session.id, { value, events: [] });
+    this.live.set(session.id, {
+      value,
+      events: [],
+      runLifecycle: freshRunLifecycle(prompt),
+    });
     active.done = Promise.resolve()
       .then(async () => {
         let error: string | undefined;
@@ -824,6 +846,7 @@ export class HostEngine {
         // a follow-up can race cleanup and have its newly spawned child killed.
         await provider.stop(session.id);
         this.flush(session.id);
+        const finalLifecycle = this.live.get(session.id)?.runLifecycle;
         this.live.delete(session.id);
         const latest = this.store.session(session.id);
         if (latest.runId === runId) {
@@ -834,6 +857,21 @@ export class HostEngine {
               : active.cancelled
               ? "Stopped by you."
               : error;
+          // Finalize the durable run row: interrupted on error/cancel/host stop,
+          // otherwise completed only if the normalizer already saw a terminal
+          // event (message.completed). A run that ended abruptly mid-stream is
+          // interrupted, never silently completed.
+          const run = this.store.runs(session.id).find((r) => r.id === runId);
+          if (run) {
+            this.store.upsertRun(session.id, {
+              ...run,
+              status:
+                finalLifecycle?.status === "completed"
+                  ? "completed"
+                  : "interrupted",
+              endedAt: Date.now(),
+            });
+          }
           this.save(
             this.settled(
               latest,
@@ -866,6 +904,21 @@ export class HostEngine {
     if (!live || live.value.runId !== runId || live.value.status !== "running")
       return;
     const session = applyHarnessEvent(live.value.session, event);
+    // Content-agnostic normalizer: fold the event into the run lifecycle state
+    // (status transition only; content stays in blocks) and persist the run row.
+    const lifecycle = normalizeRunEvent(live.runLifecycle, event);
+    if (lifecycle !== live.runLifecycle) {
+      const run = this.store.runs(id).find((r) => r.id === runId);
+      if (run) {
+        this.store.upsertRun(id, {
+          ...run,
+          status: lifecycle.status,
+          endedAt: lifecycle.status === "running" ? null : Date.now(),
+          message: lifecycle.message ?? run.message,
+        });
+      }
+      live.runLifecycle = lifecycle;
+    }
     if (session === live.value.session) return;
     live.value = { ...live.value, session };
     live.events.push(event);
