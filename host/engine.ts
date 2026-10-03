@@ -57,6 +57,12 @@ import {
   markEffectInFlight,
   markEffectDone,
 } from "./provider-effects";
+import {
+  createCheckpointScope,
+  ensurePreRunBaseline,
+  captureCheckpoint,
+  checkpointScopes,
+} from "./checkpoint";
 import { parseRemoteAttachments, resolveAttachments } from "./attachments";
 
 // Streamed output is written in batches. Anything a user may need to act on
@@ -887,6 +893,19 @@ export class HostEngine {
           this.store.upsertNode(
             freshRootNode(value.session.id, runId),
           );
+          // S3: a root checkpoint scope is auto-created at run start with a
+          // pre-run baseline, so rollback and checkpoint-aware forks have a
+          // stable boundary. Captured automatically at run terminal below.
+          const rootScopeId = createCheckpointScope(this.store, {
+            sessionId: value.session.id,
+            runOrdinal,
+            advancesAppRunCount: true,
+          });
+          ensurePreRunBaseline(
+            this.store,
+            rootScopeId,
+            `Baseline before run ${runOrdinal}.`,
+          );
           effect = (saved) => {
             this.run(
               saved,
@@ -1139,6 +1158,28 @@ export class HostEngine {
                   : ("interrupted" as const),
               endedAt: now(),
             });
+          }
+          // S3: auto-capture the run's root checkpoint scope at terminal
+          // (completed or interrupted). Idempotent: a scope already captured
+          // or rolled back is left untouched. The scope is found by ordinal
+          // (the durable run row owns the ordinal; the scope was created at
+          // run start with the same ordinal + advancesAppRunCount=true).
+          const terminalRun = this.store.runs(session.id).find(
+            (r) => r.id === runId,
+          );
+          const rootScope = terminalRun
+            ? checkpointScopes(this.store, session.id).find(
+                (scope) =>
+                  scope.runOrdinal === terminalRun.ordinal &&
+                  scope.advancesAppRunCount,
+              )
+            : undefined;
+          if (rootScope) {
+            captureCheckpoint(
+              this.store,
+              rootScope.id,
+              `Captured after run ${terminalRun!.ordinal} (${terminalRun!.status}).`,
+            );
           }
           this.save(
             this.settled(

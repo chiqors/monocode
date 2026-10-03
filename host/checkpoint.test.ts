@@ -260,10 +260,18 @@ describe("rollback reconciliation (durable, not UI)", () => {
     // Roll back to run 1 (the checkpointed point).
     rollbackThread(store, created.sessionId, 1);
 
-    // The checkpoint scope is still captured for run 1; later runs rolled back.
+    // S3 auto-capture creates one root scope per run. Rollback keeps the
+    // run-1 scopes (including the manual capture) captured; later auto scopes
+    // are rolled back.
     const scopes = checkpointScopes(store, created.sessionId);
-    expect(scopes).toHaveLength(1);
-    expect(scopes[0]!.captureSummary).toBe("capture run 1");
+    expect(scopes.length).toBeGreaterThanOrEqual(2);
+    const manual = scopes.find((s) => s.captureSummary === "capture run 1");
+    expect(manual).toBeTruthy();
+    expect(manual!.status).toBe("captured");
+    // Every scope at an ordinal after the target is rolled back.
+    const laterScopes = scopes.filter((s) => s.runOrdinal > 1);
+    expect(laterScopes.length).toBeGreaterThanOrEqual(1);
+    expect(laterScopes.every((s) => s.status === "rolled_back")).toBe(true);
     const runs = store.runs(created.sessionId);
     expect(runs[1]!.status).toBe("rolled_back");
 

@@ -436,6 +436,19 @@ export class HostStore {
       this.db.prepare("DELETE FROM execution_nodes WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM provider_threads WHERE session_id=?").run(id);
       this.db.prepare("DELETE FROM handoffs WHERE session_id=?").run(id);
+      // G3/S3 child rows: checkpoint scopes, pending fork transfers, and
+      // delegated tasks are all keyed to a session and must cascade.
+      this.db.prepare("DELETE FROM checkpoint_scopes WHERE session_id=?").run(id);
+      this.db
+        .prepare(
+          "DELETE FROM context_transfers WHERE source_session_id=? OR fork_session_id=?",
+        )
+        .run(id, id);
+      this.db
+        .prepare(
+          "DELETE FROM delegated_tasks WHERE lead_session_id=? OR child_session_id=?",
+        )
+        .run(id, id);
       this.db.prepare("DELETE FROM sessions WHERE id=?").run(id);
       this.cache.delete(id);
     });
