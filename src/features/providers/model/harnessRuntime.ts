@@ -36,6 +36,7 @@ export type HarnessRuntimeOverride = {
 };
 
 const overrides = new Map<HarnessId, HarnessRuntimeOverride>();
+const volatileEnvironment = new Map<HarnessId, Record<string, string>>();
 const OVERRIDE_KEY = "monocode.harnessRuntimeOverrides.v1";
 try {
   const raw = localStorage.getItem(OVERRIDE_KEY);
@@ -55,10 +56,22 @@ try {
   }
 } catch { /* unavailable in native/headless startup */ }
 export function getHarnessRuntimeOverride(harness: HarnessId): HarnessRuntimeOverride | undefined {
-  return overrides.get(harness);
+  const metadata = overrides.get(harness);
+  const environment = volatileEnvironment.get(harness);
+  if (!metadata && !environment) return undefined;
+  return { ...metadata, ...(environment ? { environment } : {}) };
 }
 export function setHarnessRuntimeOverride(harness: HarnessId, value: HarnessRuntimeOverride): void {
-  overrides.set(harness, value);
+  const { environment, ...metadata } = value;
+  overrides.set(harness, {
+    ...metadata,
+    environmentNames: environment ? Object.keys(environment) : metadata.environmentNames ?? [],
+  });
+  if (environment && Object.keys(environment).length > 0) {
+    volatileEnvironment.set(harness, environment);
+  } else {
+    volatileEnvironment.delete(harness);
+  }
   try {
     const persisted = Object.fromEntries(
       [...overrides.entries()].map(([key, entry]) => [key, {
@@ -76,6 +89,7 @@ export function setHarnessRuntimeOverride(harness: HarnessId, value: HarnessRunt
 }
 export function clearHarnessRuntimeOverride(harness: HarnessId): void {
   overrides.delete(harness);
+  volatileEnvironment.delete(harness);
   try {
     localStorage.setItem(OVERRIDE_KEY, JSON.stringify(Object.fromEntries(overrides)));
   } catch { /* ignore storage failures */ }
