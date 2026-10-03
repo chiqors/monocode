@@ -83,6 +83,21 @@ export class HostStore {
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS idx_context_transfers_fork ON context_transfers(fork_session_id)",
     );
+    this.db.exec(`CREATE TABLE IF NOT EXISTS checkpoint_scopes (
+      id TEXT PRIMARY KEY,
+      parent_id TEXT,
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      run_ordinal INTEGER NOT NULL,
+      advances_app_run_count INTEGER NOT NULL,
+      baseline_summary TEXT,
+      capture_summary TEXT,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER
+    );`);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_checkpoint_scopes_session ON checkpoint_scopes(session_id)",
+    );
     this.db.exec(`CREATE TABLE IF NOT EXISTS execution_nodes (
       id TEXT NOT NULL,
       session_id TEXT NOT NULL REFERENCES sessions(id),

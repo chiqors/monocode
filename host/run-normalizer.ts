@@ -12,7 +12,9 @@ export type RunStatus =
   | "completed"
   | "interrupted"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  /** G3: turned over by a rollback to an earlier run; stays for audit. */
+  | "rolled_back";
 
 /** The durable, app-owned Run entity (a user-visible counted turn). */
 export type Run = {
