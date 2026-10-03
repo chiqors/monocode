@@ -63,12 +63,19 @@ export function getHarnessRuntimeOverride(harness: HarnessId): HarnessRuntimeOve
 }
 export function setHarnessRuntimeOverride(harness: HarnessId, value: HarnessRuntimeOverride): void {
   const { environment, ...metadata } = value;
+  const activeEnvironment = environment
+    ? Object.fromEntries(
+        Object.entries(environment).filter(([, entry]) => entry.trim().length > 0),
+      )
+    : {};
   overrides.set(harness, {
     ...metadata,
-    environmentNames: environment ? Object.keys(environment) : metadata.environmentNames ?? [],
+    environmentNames: environment
+      ? Object.keys(environment)
+      : metadata.environmentNames ?? [],
   });
-  if (environment && Object.keys(environment).length > 0) {
-    volatileEnvironment.set(harness, environment);
+  if (Object.keys(activeEnvironment).length > 0) {
+    volatileEnvironment.set(harness, activeEnvironment);
   } else {
     volatileEnvironment.delete(harness);
   }
