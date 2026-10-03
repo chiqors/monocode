@@ -4,8 +4,7 @@ The rework is shipped (T1–T7, F1–F6); this document lists what is **not**
 implemented yet compared with the t3code V2 reference
 (`t3code/docs/orchestration-v2/`), verified against the current codebase. Each
 gap is a candidate for the next round of tracer-bullet tickets under
-[issue #1](https://github.com/chiqors/monocode/issues/1). None of these are
-ticketed yet.
+[issue #1](https://github.com/chiqors/monocode/issues/1).
 
 ## 1. ProviderThread as a first-class durable entity (the biggest gap)
 
@@ -16,13 +15,19 @@ prior provider defaults to **resuming that provider's previous provider
 thread** and injecting a **delta handoff** covering the off-provider runs;
 a fresh provider thread with a full summary is only the fallback.
 
-**MonoCode today:** `providerThreadId` is a thin optional field on the session
-snapshot (`src/features/sessions/model/session.ts`), `pendingSwitch` records
-`fromProviderSessionId`/`fromProviderAccountId` for revert, and the host
-records `handoffs` rows — but a switch-back creates a **new target session**.
-There is no durable `ProviderThread` entity, no resume cursor, and no
-delta-handoff-into-resumed-thread flow. Only the provider transport test
-touches a `thread/resume` call.
+**MonoCode: the durable entity half has landed (#15, closed).** `host/provider-thread.ts`
+now records one `provider_threads` row per (session, provider) with
+`nativeThreadRef` as evidence, `firstRunOrdinal`/`lastRunOrdinal` coverage
+(derived from the run store, so a delta is derivable), and `handoffIds`,
+written at the provider-bound / switch-handoff / send seams.
+
+**Still to do (G1b, #16 — blocked by #15):** switching **back** to a provider
+still creates a **new target session** instead of **resuming** its prior
+provider thread with a **delta handoff** covering the off-provider runs.
+`providerThreadId` remains a thin optional field on the session snapshot
+(`src/features/sessions/model/session.ts`); `pendingSwitch` records
+`fromProviderSessionId`/`fromProviderAccountId` for revert; there is still no
+resume-cursor-driven `thread/resume` flow.
 
 **Why it matters:** it is t3code V2's default strategy for returning to a
 provider, preserves native continuity, and avoids repeatedly re-summarizing.
