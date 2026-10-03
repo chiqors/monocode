@@ -62,13 +62,24 @@ at fork time (`host/fork-merge.ts`); no source-point policy.
 
 ## 3. CheckpointScope + rollback reconciliation
 
+**Landed (G3 #19, closed).** `host/checkpoint.ts` + `checkpoint_scopes` table
+carry nested `CheckpointScope`s (`advancesAppRunCount`, pre-run baseline +
+post-run capture, status, parent id). `host/rollback.ts` `rollbackThread` is
+the durable reconcile: marks later runs `rolled_back` (never deletes, no
+duplicate runs), truncates each ProviderThread's covered range back to the
+target, marks later checkpoints rolled back (target stays captured), and
+records a `handler: "rollback"` handoff so the next switch-back delta covers
+exactly the post-rollback runs.
+
+**Remaining same-shape work (not ticketed):** the provider-native revert
+(probe `historyMode` / page `thread/turns/list` / `thread/revert`) is still
+behind the capability policy in the harness layer; checkpoint capture is
+explicit via the module API (the engine does not yet auto-capture at run
+boundaries), and G2's stable fork points can now extend to checkpoints.
+
 **t3code V2:** nested `CheckpointScope`s with `advancesAppRunCount`; pre-run
 baseline + post-run capture; provider rollback returns a snapshot that is
 reconciled (probe `historyMode`, page `thread/turns/list`, `thread/revert`).
-
-**MonoCode today:** `rollback` is only a capability flag
-(`host/capabilities.ts`); there is no host checkpoint table or rollback flow.
-Node `content` (F5) gives per-tool status, not checkpoints.
 
 ## 4. Replay-first deterministic time / ids
 
