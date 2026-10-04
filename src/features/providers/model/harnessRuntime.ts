@@ -167,7 +167,7 @@ function normalizeSnapshot(raw: unknown, harness: HarnessId): HarnessRuntimeSnap
 
 export function inspectHarnessRuntime(
   harness: HarnessId,
-  options: { refreshModels?: boolean; force?: boolean } = {},
+  options: { refreshModels?: boolean; force?: boolean; override?: HarnessRuntimeOverride } = {},
 ): Promise<HarnessRuntimeSnapshot> {
   const key = `${harness}:${options.refreshModels === true}`;
   if (!options.force) {
@@ -179,6 +179,7 @@ export function inspectHarnessRuntime(
   const request = invoke<unknown>("harness_runtime_inspect", {
     harness,
     refreshModels: options.refreshModels === true,
+    overrideConfig: options.override,
   }).then((raw) => {
     const snapshot = normalizeSnapshot(raw, harness);
     publish(harness, snapshot);

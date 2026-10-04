@@ -14,7 +14,10 @@ import {
 } from "../../core/child";
 import { asRecord, stringField } from "./codexProtocol";
 import { JsonRpcClient } from "../../core/jsonRpc";
-import { inspectHarnessRuntime } from "../../../../features/providers/model/harnessRuntime";
+import {
+  getHarnessRuntimeOverride,
+  inspectHarnessRuntime,
+} from "../../../../features/providers/model/harnessRuntime";
 
 const PROBE_ID = "monocode-codex-probe";
 const DISCOVERY_TIMEOUT_MS = 15_000;
@@ -129,6 +132,7 @@ async function discoverConfiguredApiModels(): Promise<AgentModel[]> {
     const runtime = await inspectHarnessRuntime("codex", {
       refreshModels: true,
       force: true,
+      override: getHarnessRuntimeOverride("codex"),
     });
     if (runtime.authMode !== "api" || runtime.authStatus !== "configured") {
       return [];

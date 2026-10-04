@@ -62,31 +62,54 @@ struct CodexConfig {
 pub async fn harness_runtime_inspect(
     harness: String,
     refresh_models: Option<bool>,
+    override_config: Option<Value>,
 ) -> Result<HarnessRuntimeSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || inspect(&harness, refresh_models.unwrap_or(false)))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        inspect(&harness, refresh_models.unwrap_or(false), override_config)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
-fn inspect(harness: &str, refresh_models: bool) -> Result<HarnessRuntimeSnapshot, String> {
+fn inspect(
+    harness: &str,
+    refresh_models: bool,
+    override_config: Option<Value>,
+) -> Result<HarnessRuntimeSnapshot, String> {
     let harness = harness.trim().to_ascii_lowercase();
     if harness.is_empty() {
         return Err("Harness name is required".into());
     }
     match harness.as_str() {
-        "codex" => inspect_codex(refresh_models),
+        "codex" => inspect_codex(refresh_models, override_config),
         _ => inspect_generic(&harness),
     }
 }
 
-fn inspect_codex(refresh_models: bool) -> Result<HarnessRuntimeSnapshot, String> {
+fn inspect_codex(
+    refresh_models: bool,
+    override_config: Option<Value>,
+) -> Result<HarnessRuntimeSnapshot, String> {
     let config = read_codex_config();
+    let override_table = override_config.as_ref().and_then(Value::as_object);
+    let override_base_url = override_table
+        .and_then(|table| table.get("baseUrl"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+    let override_environment = override_table
+        .and_then(|table| table.get("environment"))
+        .and_then(Value::as_object);
     let binary_path = crate::harness::resolve_harness_binary_for_config("codex");
     let env_key = config
         .env_key
         .clone()
         .unwrap_or_else(|| "OPENAI_API_KEY".into());
-    let key_present = env_value(&env_key).is_some();
+    let key_present = override_environment
+        .and_then(|values| values.get(&env_key))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .is_some()
+        || env_value(&env_key).is_some();
     let has_auth_json = codex_home().is_some_and(|home| home.join("auth.json").is_file());
     let api_mode = config
         .forced_login_method
@@ -119,8 +142,8 @@ fn inspect_codex(refresh_models: bool) -> Result<HarnessRuntimeSnapshot, String>
     let mut model_source = None;
     let mut error = None;
     if refresh_models && api_mode {
-        if let Some(base_url) = config.base_url.as_deref() {
-            match query_models(base_url, env_key.as_str()) {
+        if let Some(base_url) = override_base_url.or(config.base_url.as_deref()) {
+            match query_models_with_overrides(base_url, env_key.as_str(), override_environment) {
                 Ok(found) => {
                     models = found;
                     model_source = Some("openai-compatible-api".into());
@@ -137,7 +160,7 @@ fn inspect_codex(refresh_models: bool) -> Result<HarnessRuntimeSnapshot, String>
         auth_mode: auth_mode.into(),
         auth_status: auth_status.into(),
         provider_name: config.provider_name,
-        base_url: config.base_url,
+        base_url: override_base_url.map(String::from).or(config.base_url),
         model: config.model,
         environment: vec![RuntimeVariable {
             name: env_key,
@@ -251,13 +274,23 @@ fn read_codex_config() -> CodexConfig {
     }
 }
 
-fn query_models(base_url: &str, env_key: &str) -> Result<Vec<RuntimeModel>, String> {
+fn query_models_with_overrides(
+    base_url: &str,
+    env_key: &str,
+    override_environment: Option<&serde_json::Map<String, Value>>,
+) -> Result<Vec<RuntimeModel>, String> {
     let url = format!("{}/models", base_url.trim_end_matches('/'));
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
         .build();
     let mut request = agent.get(&url).set("Accept", "application/json");
-    if let Some(key) = env_value(env_key) {
+    if let Some(key) = override_environment
+        .and_then(|values| values.get(env_key))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(String::from)
+        .or_else(|| env_value(env_key))
+    {
         request = request.set("Authorization", &format!("Bearer {key}"));
     }
     let response = request
